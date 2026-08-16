@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import type { DayOfWeek, Match, Proposal, ProposalStatus, Venue } from "../lib/contracts";
+import type { DayOfWeek, Match, MatchChatIntent, Proposal, ProposalStatus, Venue } from "../lib/contracts";
 
 type Tab = "matches" | "proposals" | "schedule" | "profile";
 type Schedule = { id: string; day: DayOfWeek; subject: string; start: string; end: string };
@@ -19,10 +19,9 @@ export function App() {
 
 function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
   const [tab, setTab] = useState<Tab>("matches");
-  const [matches, setMatches] = useState<Match[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const load = () => void Promise.all([api.getMatches(), api.getProposals({ status: "PENDING,ACCEPTED" })]).then(([matchPage, proposalPage]) => { setMatches(matchPage.data); setProposals(proposalPage.data); setError(null); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "데이터를 불러오지 못했어요."));
+  const load = () => void api.getProposals({ status: "PENDING,ACCEPTED" }).then((proposalPage) => { setProposals(proposalPage.data); setError(null); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "데이터를 불러오지 못했어요."));
   useEffect(load, []);
   const changeStatus = async (id: string, status: ProposalStatus) => { try { await api.changeProposalStatus(id, status); load(); } catch (cause) { setError(cause instanceof Error ? cause.message : "제안 상태를 바꾸지 못했어요."); } };
 
@@ -30,7 +29,7 @@ function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
   return <><header className="site-header"><button className="brand" onClick={() => setTab("matches")} aria-label="Lunch Mate 홈"><span>LM</span>Lunch Mate</button><nav aria-label="주 메뉴">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</nav><div className="user-menu"><ShibaAvatar className="user-avatar" /><span className="user-name">민지</span><button className="signout" onClick={onSignOut}>로그아웃</button></div></header><main className={isChatMode ? "chat-page" : "app-shell"}>
     {!isChatMode && <header className="hero"><div><p className="eyebrow">LUNCH MATE</p><h1>공강을 같이 보낼<br />친구를 찾아보세요.</h1><p className="subtle">같은 캠퍼스에서 실제로 만날 수 있는 점심 시간을 연결합니다.</p></div><div className="hero-actions"><div className="status-pill"><span>●</span> 매칭 준비 완료</div></div></header>}
     {error && <p className="error" role="alert">{error}</p>}
-    {tab === "matches" && <Matches matches={matches} />}
+    {tab === "matches" && <Matches />}
     {tab === "proposals" && <Proposals proposals={proposals} onChange={changeStatus} />}
     {tab === "schedule" && <ScheduleView />}
     {tab === "profile" && <ProfileView />}
@@ -53,14 +52,61 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: () => void }) {
   return <main className="auth-page"><section className="auth-intro"><p className="eyebrow">LUNCH MATE</p><h1>점심 공강,<br /><em>혼자 보내지 마세요.</em></h1><p>같은 캠퍼스에서 공강이 겹치는 친구를 만나 보세요.</p><ul><li>같은 캠퍼스의 메이트 추천</li><li>공통 공강 시간으로 안전한 제안</li><li>시간에 맞는 점심 장소 추천</li></ul></section><section className="auth-card"><div className="auth-brand">LM</div><div className="auth-heading"><p className="eyebrow">{mode === "login" ? "WELCOME BACK" : "START LUNCH MATE"}</p><h2>{mode === "login" ? "다시 만나서 반가워요" : "점심 메이트를 찾아볼까요?"}</h2><p>{mode === "login" ? "로그인하고 오늘의 공강 메이트를 확인하세요." : "가입 후 프로필과 공강 시간을 설정할 수 있어요."}</p></div><div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => switchMode("login")}>로그인</button><button className={mode === "signup" ? "selected" : ""} onClick={() => switchMode("signup")}>회원가입</button></div><form onSubmit={(event) => { event.preventDefault(); submit(); }}><label>이메일<input type="email" autoComplete="email" placeholder="you@university.ac.kr" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>{mode === "signup" && <label>닉네임<input placeholder="2~20자" value={nickname} onChange={(event) => setNickname(event.target.value)} required /></label>}<label>비밀번호<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="8자 이상 입력" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{mode === "signup" && <label>비밀번호 확인<input type="password" autoComplete="new-password" placeholder="비밀번호를 다시 입력" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} required /></label>}{mode === "login" && <label className="remember"><input type="checkbox" /> 로그인 상태 유지</label>}{error && <p className="error">{error}</p>}<button className="primary full-width auth-submit" type="submit">{mode === "login" ? "로그인" : "회원가입하고 시작하기"}</button></form><p className="auth-notice">현재는 화면 목업입니다. 인증 서버 연동 시 이 폼이 실제 로그인으로 연결됩니다.</p></section></main>;
 }
 
-function Matches({ matches }: { matches: Match[] }) {
-  const [text, setText] = useState(""); const [isSending, setIsSending] = useState(false);
+function Matches() {
+  const [text, setText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [conversationId, setConversationId] = useState<string>();
+  const [intent, setIntent] = useState<MatchChatIntent>();
+  const [chatMatches, setChatMatches] = useState<Match[]>([]);
+  const [matchIndex, setMatchIndex] = useState(0);
   const [messages, setMessages] = useState<Array<{ id: string; role: "assistant" | "user"; text: string }>>([{ id: "welcome", role: "assistant", text: "안녕하세요! 🤖 언제, 얼마나 오래 점심을 먹고 싶은지 편하게 말해 주세요. 공강이 맞는 메이트를 찾아드릴게요." }]);
-  const [match, setMatch] = useState<Match | null>(null); const [venues, setVenues] = useState<Venue[]>([]); const [venueIndex, setVenueIndex] = useState(0); const [modal, setModal] = useState<"match" | "venues" | "sent" | null>(null);
-  const send = async (content = text) => { const prompt = content.trim(); if (!prompt || isSending) return; setMessages((items) => [...items, { id: crypto.randomUUID(), role: "user", text: prompt }]); setText(""); setIsSending(true); try { const response = await api.sendMatchChat(prompt); const found = response.data.matches[0] ?? matches[0] ?? null; setMessages((items) => [...items, { id: crypto.randomUUID(), role: "assistant", text: response.data.assistantMessage }]); if (found) { setMatch(found); setModal("match"); } } catch (cause) { setMessages((items) => [...items, { id: crypto.randomUUID(), role: "assistant", text: cause instanceof Error ? cause.message : "잠시 문제가 생겼어요. 다시 요청해 주세요." }]); } finally { setIsSending(false); } };
-  const acceptMatch = async () => { if (!match) return; const slot = match.commonSlots[0]; const query = new URLSearchParams({ campusId: match.campus.id, date: slot.nextDate ?? "2026-08-20", startTime: slot.startTime, endTime: slot.endTime, activity: "LUNCH" }); const response = await api.getVenueRecommendations(query); setVenues(response.data); setVenueIndex(0); setModal("venues"); };
-  const sendProposal = async () => { if (!match || !venues[venueIndex]) return; const slot = match.commonSlots[0]; await api.createProposal({ receiverId: match.userId, date: slot.nextDate ?? "2026-08-20", startTime: slot.startTime, endTime: slot.endTime, activity: "LUNCH", venue: { type: "RECOMMENDED", venueId: venues[venueIndex].id }, message: null }); setModal("sent"); setMessages((items) => [...items, { id: crypto.randomUUID(), role: "assistant", text: `${venues[venueIndex].name}에서 만나는 점심 제안을 보냈어요! 🍽️` }]); };
-  return <section className="chat-fullscreen"><div className="chat-card"><header className="chat-heading"><ShibaAvatar className="assistant-avatar" /><div><p className="eyebrow">LUNCH MATE AI</p><h2>점심 약속을 말로 잡아보세요</h2><span>공강을 확인해 딱 맞는 메이트를 찾아드려요.</span></div></header><div className="chat-log" aria-live="polite">{messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>{message.role === "assistant" && <ShibaAvatar className="message-avatar" />}<p>{message.text}</p></article>)}{isSending && <article className="chat-message assistant"><ShibaAvatar className="message-avatar" /><p className="typing">추천을 찾고 있어요…</p></article>}</div><div className="quick-prompts">{["월요일 12시에 한 시간 점심 먹을 친구 찾아줘", "이번 주 공강에 가까운 곳에서 점심 먹고 싶어", "90분 동안 대화하며 점심 먹을 메이트 찾아줘"].map((prompt) => <button key={prompt} onClick={() => void send(prompt)}>{prompt}</button>)}</div><form className="chat-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}><textarea aria-label="AI에게 보낼 메시지" placeholder="예: 목요일 12시쯤, 조용한 곳에서 점심 먹고 싶어" value={text} onChange={(event) => setText(event.target.value)} rows={2} /><button className="primary" type="submit" disabled={!text.trim() || isSending}>보내기 ↑</button></form></div>{modal && match && <div className="dialog-backdrop"><section className="match-modal" role="dialog" aria-modal="true"><button className="close" onClick={() => setModal(null)} aria-label="닫기">×</button>{modal === "match" && <><ShibaAvatar className="match-profile" /><p className="eyebrow">AI MATCH FOUND</p><h2>{match.nickname}님을 찾았어요!</h2><p>{match.summary}</p><div className="chips">{match.commonSlots.map((slot) => <span key={slot.startTime}>{dayLabels[slot.dayOfWeek]} {slot.startTime}–{slot.endTime}</span>)}</div><div className="actions"><button className="secondary" onClick={() => setModal(null)}>다시 찾아보기</button><button className="primary" onClick={() => void acceptMatch()}>이 메이트와 점심 잡기</button></div></>}{modal === "venues" && <><ShibaAvatar className="match-profile" /><p className="eyebrow">PERSONALIZED PLACES</p><h2>어디서 만날까요?</h2><p>{match.nickname}님과의 공강 시간에 맞춰 골랐어요.</p>{venues.length > 0 && <div className="venue-carousel"><button aria-label="이전 장소" onClick={() => setVenueIndex((index) => (index + venues.length - 1) % venues.length)}>←</button><article><span>{venueIndex + 1} / {venues.length}</span><h3>{venues[venueIndex].name}</h3><p>🚶 도보 {venues[venueIndex].walkMinutes}분 · {venues[venueIndex].description}</p><small>{venues[venueIndex].recommendationReason}</small></article><button aria-label="다음 장소" onClick={() => setVenueIndex((index) => (index + 1) % venues.length)}>→</button></div>}<button className="primary full-width" disabled={!venues.length} onClick={() => void sendProposal()}>이 장소로 제안 보내기</button></>}{modal === "sent" && <><ShibaAvatar className="match-profile" /><p className="eyebrow">PROPOSAL SENT</p><h2>점심 제안을 보냈어요</h2><p>{match.nickname}님의 응답을 기다리는 동안 다른 공강도 확인해 보세요.</p><button className="primary full-width" onClick={() => setModal(null)}>채팅으로 돌아가기</button></>}</section></div>}</section>;
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [venueIndex, setVenueIndex] = useState(0);
+  const [modal, setModal] = useState<"match" | "venues" | "sent" | null>(null);
+  const match = chatMatches[matchIndex] ?? null;
+  const selectedSlot = match?.selectedSlot ?? match?.commonSlots[0];
+
+  const send = async (content = text) => {
+    const prompt = content.trim();
+    if (!prompt || isSending) return;
+    setMessages((items) => [...items, { id: crypto.randomUUID(), role: "user", text: prompt }]);
+    setText("");
+    setIsSending(true);
+    try {
+      const response = await api.sendMatchChat(prompt, conversationId);
+      const data = response.data;
+      setConversationId(data.conversationId);
+      setIntent(data.parsedIntent);
+      setChatMatches(data.matches);
+      setMatchIndex(0);
+      setMessages((items) => [...items, { id: crypto.randomUUID(), role: "assistant", text: data.assistantMessage }]);
+      if (data.matches.length > 0) setModal("match");
+    } catch (cause) {
+      setMessages((items) => [...items, { id: crypto.randomUUID(), role: "assistant", text: cause instanceof Error ? cause.message : "잠시 문제가 생겼어요. 다시 요청해 주세요." }]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const acceptMatch = async () => {
+    if (!match || !selectedSlot) return;
+    const query = new URLSearchParams({ campusId: match.campus.id, date: selectedSlot.nextDate ?? intent?.date ?? "", startTime: selectedSlot.startTime, endTime: selectedSlot.endTime, activity: "LUNCH" });
+    if (intent?.budget) query.set("budget", intent.budget);
+    if (intent?.atmosphere) query.set("atmosphere", intent.atmosphere);
+    const response = await api.getVenueRecommendations(query);
+    setVenues(response.data);
+    setVenueIndex(0);
+    setModal("venues");
+  };
+
+  const sendProposal = async () => {
+    if (!match || !selectedSlot || !venues[venueIndex]) return;
+    await api.createProposal({ receiverId: match.userId, date: selectedSlot.nextDate ?? intent?.date ?? "", startTime: selectedSlot.startTime, endTime: selectedSlot.endTime, activity: "LUNCH", venue: { type: "RECOMMENDED", venueId: venues[venueIndex].id }, message: null });
+    setModal("sent");
+    setMessages((items) => [...items, { id: crypto.randomUUID(), role: "assistant", text: `${venues[venueIndex].name}에서 만나는 점심 제안을 보냈어요! 🍽️` }]);
+  };
+
+  return <section className="chat-fullscreen"><div className="chat-card"><header className="chat-heading"><ShibaAvatar className="assistant-avatar" /><div><p className="eyebrow">LUNCH MATE AI</p><h2>점심 약속을 말로 잡아보세요</h2><span>공강을 확인해 딱 맞는 메이트를 찾아드려요.</span></div></header><div className="chat-log" aria-live="polite">{messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>{message.role === "assistant" && <ShibaAvatar className="message-avatar" />}<p>{message.text}</p></article>)}{isSending && <article className="chat-message assistant"><ShibaAvatar className="message-avatar" /><p className="typing">추천을 찾고 있어요…</p></article>}</div><div className="quick-prompts">{["월요일 12시에 한 시간 점심 먹을 친구 찾아줘", "이번 주 공강에 가까운 곳에서 점심 먹고 싶어", "90분 동안 대화하며 점심 먹을 메이트 찾아줘"].map((prompt) => <button key={prompt} onClick={() => void send(prompt)}>{prompt}</button>)}</div><form className="chat-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}><textarea aria-label="AI에게 보낼 메시지" placeholder="예: 목요일 12시쯤, 조용한 곳에서 점심 먹고 싶어" value={text} onChange={(event) => setText(event.target.value)} rows={2} /><button className="primary" type="submit" disabled={!text.trim() || isSending}>보내기 ↑</button></form></div>{modal && match && <div className="dialog-backdrop"><section className="match-modal" role="dialog" aria-modal="true"><button className="close" onClick={() => setModal(null)} aria-label="닫기">×</button>{modal === "match" && <><ShibaAvatar className="match-profile" /><p className="eyebrow">AI MATCH {chatMatches.length > 1 ? `${matchIndex + 1}/${chatMatches.length}` : "FOUND"}</p><h2>{match.nickname}님을 찾았어요!</h2><p>{match.summary}</p><div className="chips">{selectedSlot && <span>{dayLabels[selectedSlot.dayOfWeek]} {selectedSlot.startTime}–{selectedSlot.endTime}</span>}</div>{chatMatches.length > 1 && <div className="actions"><button className="secondary" onClick={() => setMatchIndex((index) => (index + chatMatches.length - 1) % chatMatches.length)}>이전 추천</button><button className="secondary" onClick={() => setMatchIndex((index) => (index + 1) % chatMatches.length)}>다음 추천</button></div>}<div className="actions"><button className="secondary" onClick={() => setModal(null)}>다시 찾아보기</button><button className="primary" onClick={() => void acceptMatch()}>이 메이트와 점심 잡기</button></div></>}{modal === "venues" && <><ShibaAvatar className="match-profile" /><p className="eyebrow">PERSONALIZED PLACES</p><h2>어디서 만날까요?</h2><p>{match.nickname}님과의 공강 시간에 맞춰 골랐어요.</p>{venues.length > 0 && <div className="venue-carousel"><button aria-label="이전 장소" onClick={() => setVenueIndex((index) => (index + venues.length - 1) % venues.length)}>←</button><article><span>{venueIndex + 1} / {venues.length}</span><h3>{venues[venueIndex].name}</h3><p>🚶 도보 {venues[venueIndex].walkMinutes}분 · {venues[venueIndex].description}</p><small>{venues[venueIndex].recommendationReason}</small></article><button aria-label="다음 장소" onClick={() => setVenueIndex((index) => (index + 1) % venues.length)}>→</button></div>}<button className="primary full-width" disabled={!venues.length} onClick={() => void sendProposal()}>이 장소로 제안 보내기</button></>}{modal === "sent" && <><ShibaAvatar className="match-profile" /><p className="eyebrow">PROPOSAL SENT</p><h2>점심 제안을 보냈어요</h2><p>{match.nickname}님의 응답을 기다리는 동안 다른 공강도 확인해 보세요.</p><button className="primary full-width" onClick={() => setModal(null)}>채팅으로 돌아가기</button></>}</section></div>}</section>;
 }
 
 function Proposals({ proposals, onChange }: { proposals: Proposal[]; onChange: (id: string, status: ProposalStatus) => void }) {

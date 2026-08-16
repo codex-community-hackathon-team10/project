@@ -29,7 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const mockMatch: Match = {
   userId: "user_b", nickname: "Alex", grade: "3", campus: { id: "campus_yonsei_sinchon", name: "신촌캠퍼스" },
   commonSlots: [{ dayOfWeek: "MONDAY", startTime: "12:00", endTime: "13:30", durationMinutes: 90, nextDate: "2026-08-17" }],
-  commonActivities: ["LUNCH", "LANGUAGE_EXCHANGE"], commonInterests: ["MUSIC", "TRAVEL"], score: 71,
+  commonActivities: ["LUNCH", "LANGUAGE_EXCHANGE"], commonInterests: ["MUSIC", "TRAVEL"], selectedSlot: { dayOfWeek: "MONDAY", startTime: "12:00", endTime: "13:30", durationMinutes: 90, nextDate: "2026-08-17" }, score: 71,
   reasons: [{ type: "COMMON_TIME", label: "공통 가능 시간 90분", score: 30 }],
   summary: "월요일 12:00~13:30에 90분 동안 만날 수 있고, 두 분 모두 점심을 선호해요.", summarySource: "TEMPLATE",
 };
@@ -47,9 +47,9 @@ let mockProposals: Proposal[] = [
 
 export const api = {
   getMatches: () => useMockApi ? Promise.resolve({ data: [mockMatch], meta: { hasNext: false, nextCursor: null } } satisfies Page<Match>) : request<Page<Match>>("/matches?limit=20"),
-  sendMatchChat: (message: string) => {
-    if (!useMockApi) return request<ApiResponse<MatchChatResponse>>("/match-conversations/messages", { method: "POST", body: JSON.stringify({ message }) });
-    return Promise.resolve({ data: { assistantMessage: "월요일 12:00~13:30에 점심을 함께할 수 있는 Alex님을 찾았어요. 장소까지 골라 제안을 보낼 수 있어요.", parsedIntent: { date: "2026-08-17", startTime: "12:00", endTime: "13:30", activity: "LUNCH", missingFields: [] }, matches: [mockMatch] } } satisfies ApiResponse<MatchChatResponse>);
+  sendMatchChat: (message: string, conversationId?: string) => {
+    if (!useMockApi) return request<ApiResponse<MatchChatResponse>>("/match-conversations/messages", { method: "POST", body: JSON.stringify({ message, ...(conversationId ? { conversationId } : {}) }) });
+    return Promise.resolve({ data: { conversationId: conversationId ?? "mock-conversation", status: "MATCHES_FOUND", assistantMessage: "월요일 12:00~13:30에 점심을 함께할 수 있는 Alex님을 찾았어요. 장소까지 골라 제안을 보낼 수 있어요.", parsedIntent: { date: "2026-08-17", startTime: "12:00", endTime: "13:30", durationMinutes: 90, activity: "LUNCH", missingFields: [] }, matches: [mockMatch] } } satisfies ApiResponse<MatchChatResponse>);
   },
   getProposals: (query: { status?: string; role?: "SENT" | "RECEIVED" | "ALL" }) => {
     const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined) as Array<[string, string]>);

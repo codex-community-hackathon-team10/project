@@ -133,6 +133,7 @@
 ## AI 정책
 
 - 후보 필터와 점수는 서버 규칙으로만 계산한다.
-- AI는 계산된 reasons를 한 문장으로 다듬을 수 있다.
+- 이 `GET /matches` API는 규칙 점수와 템플릿 이유를 사용한다. 채팅 기반 AI 재정렬은 [06-match-conversations.md](./06-match-conversations.md)를 따른다.
 - AI 실패·미사용 시 템플릿과 `summarySource: TEMPLATE`을 반환한다.
 - P0 만남 제안 활동은 `LUNCH`만 허용한다. 다른 활동은 공통 태그와 점수에만 사용한다.
+- 채팅 기반 AI 재정렬은 [06-match-conversations.md](./06-match-conversations.md)를 따른다. 이 `GET /matches` API는 규칙 기반 폴백 및 기존 목록 조회를 유지한다.
