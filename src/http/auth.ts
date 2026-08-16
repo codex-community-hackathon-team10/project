@@ -16,6 +16,25 @@ export class DemoTokenVerifier implements TokenVerifier {
   }
 }
 
+export class SupabaseTokenVerifier implements TokenVerifier {
+  constructor(private readonly supabaseUrl: string, private readonly anonKey: string) {}
+
+  async verify(token: string): Promise<string> {
+    const response = await fetch(`${this.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`, { headers: { authorization: `Bearer ${token}`, apikey: this.anonKey } });
+    if (!response.ok) throw new ApiError(401, "AUTH_TOKEN_INVALID", "인증 토큰이 유효하지 않습니다.");
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== "object" || typeof (payload as { id?: unknown }).id !== "string") throw new ApiError(401, "AUTH_TOKEN_INVALID", "인증 토큰이 유효하지 않습니다.");
+    return (payload as { id: string }).id;
+  }
+}
+
+export function createConfiguredTokenVerifier(): TokenVerifier {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  if (supabaseUrl && supabaseAnonKey) return new SupabaseTokenVerifier(supabaseUrl, supabaseAnonKey);
+  return new DemoTokenVerifier();
+}
+
 export function requireAuth(verifier: TokenVerifier) {
   return async (request: Request, _response: Response, next: NextFunction): Promise<void> => {
     const authorization = request.header("authorization");
