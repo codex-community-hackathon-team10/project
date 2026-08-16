@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ApiResponse, CreateProposalInput, Match, Page, Proposal, ProposalStatus, Venue } from "./contracts";
+import type { ApiErrorBody, ApiResponse, CreateProposalInput, Match, MatchChatResponse, Page, Proposal, ProposalStatus, Venue } from "./contracts";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "";
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === "true";
@@ -47,6 +47,10 @@ let mockProposals: Proposal[] = [
 
 export const api = {
   getMatches: () => useMockApi ? Promise.resolve({ data: [mockMatch], meta: { hasNext: false, nextCursor: null } } satisfies Page<Match>) : request<Page<Match>>("/matches?limit=20"),
+  sendMatchChat: (message: string) => {
+    if (!useMockApi) return request<ApiResponse<MatchChatResponse>>("/match-conversations/messages", { method: "POST", body: JSON.stringify({ message }) });
+    return Promise.resolve({ data: { assistantMessage: "월요일 12:00~13:30에 점심을 함께할 수 있는 Alex님을 찾았어요. 장소까지 골라 제안을 보낼 수 있어요.", parsedIntent: { date: "2026-08-17", startTime: "12:00", endTime: "13:30", activity: "LUNCH", missingFields: [] }, matches: [mockMatch] } } satisfies ApiResponse<MatchChatResponse>);
+  },
   getProposals: (query: { status?: string; role?: "SENT" | "RECEIVED" | "ALL" }) => {
     const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined) as Array<[string, string]>);
     if (!useMockApi) return request<Page<Proposal>>(`/meeting-proposals?${params}`);
