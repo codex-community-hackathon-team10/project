@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { RecommendationAi } from "../ai-recommendation-service.js";
 import { inspectMeetingDateTime, rankVenues, venueRecommendationReason, type MeetingTimeInspection } from "../domain/social.js";
 import { ATMOSPHERES, PRICE_RANGES } from "../domain/types.js";
 import type { SocialStore } from "../store.js";
@@ -15,7 +16,7 @@ const queryInput = z.object({
   atmosphere: z.enum(ATMOSPHERES).optional()
 });
 
-export function createVenueRouter(store: SocialStore, clock: () => Date = () => new Date()): Router {
+export function createVenueRouter(store: SocialStore, clock: () => Date = () => new Date(), recommendationAi?: RecommendationAi): Router {
   const router = Router();
   router.get("/venues/recommendations", asyncRoute(async (request, response) => {
     const query = queryInput.parse(request.query);
@@ -24,7 +25,30 @@ export function createVenueRouter(store: SocialStore, clock: () => Date = () => 
     const inspected = inspectMeetingDateTime(query.date, query.startTime, query.endTime, clock());
     if (!inspected.ok) throw venueTimeError(inspected.code);
     const durationMinutes = (new Date(`${query.date}T${query.endTime}:00+09:00`).getTime() - inspected.startAt.getTime()) / 60_000;
-    const venues = rankVenues(await store.listActiveVenues(query.campusId), durationMinutes, query.budget, query.atmosphere).slice(0, 3).map(({ venue }) => ({
+    const rankedVenues = rankVenues(await store.listActiveVenues(query.campusId), durationMinutes, query.budget, query.atmosphere);
+    const candidates = rankedVenues.slice(0, 30);
+    let selected: Array<{ venue: (typeof candidates)[number]["venue"]; reason: string; reasonSource: "AI" | "TEMPLATE" }> = candidates.slice(0, 3).map(({ venue }) => ({ venue, reason: venueRecommendationReason(venue, durationMinutes), reasonSource: "TEMPLATE" }));
+    if (recommendationAi?.isEnabled() && candidates.length > 0) {
+      try {
+        const result = await recommendationAi.rankVenues({
+          durationMinutes,
+          budget: query.budget ?? null,
+          atmosphere: query.atmosphere ?? null,
+          candidates: candidates.map(({ venue }) => ({ id: venue.id, category: venue.category, walkMinutes: venue.walkMinutes, priceRange: venue.priceRange, tags: venue.tags, description: venue.description }))
+        });
+        const byId = new Map(candidates.map(({ venue }) => [venue.id, venue]));
+        const accepted = result.venues.flatMap((item) => {
+          const venue = byId.get(item.venueId);
+          if (!venue) return [];
+          byId.delete(item.venueId);
+          return [{ venue, reason: item.reason, reasonSource: "AI" as const }];
+        });
+        if (accepted.length > 0) selected = accepted;
+      } catch {
+        // The verified rule ranking above is the intentional immediate fallback.
+      }
+    }
+    const venues = selected.map(({ venue, reason, reasonSource }) => ({
       id: venue.id,
       campusId: venue.campusId,
       name: venue.name,
@@ -33,8 +57,8 @@ export function createVenueRouter(store: SocialStore, clock: () => Date = () => 
       priceRange: venue.priceRange,
       tags: venue.tags,
       description: venue.description,
-      recommendationReason: venueRecommendationReason(venue, durationMinutes),
-      reasonSource: "TEMPLATE"
+      recommendationReason: reason,
+      reasonSource
     }));
     if (venues.length === 0) {
       response.json({ data: [], meta: { limit: 3, emptyReason: "NO_VENUE_CANDIDATES", allowCustomVenue: true, isRealTimeAvailabilityGuaranteed: false } });

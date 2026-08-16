@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
-import type { Campus, MatchPreference, MeetingProposal, PreferredSlot, Profile, ProposalStatus, ProposalVenue, Schedule, School, User, Venue } from "./domain/types.js";
+import type { Campus, MatchConversation, MatchConversationIntent, MatchPreference, MeetingProposal, PreferredSlot, Profile, ProposalStatus, ProposalVenue, Schedule, School, User, Venue } from "./domain/types.js";
 import { now, type SocialStore } from "./store.js";
 
 const toIso = (value: Date | string): string => new Date(value).toISOString();
@@ -23,6 +23,7 @@ const proposalFromRow = (row: QueryResultRow): MeetingProposal => ({
   respondedAt: row.responded_at ? toIso(row.responded_at) : null,
   canceledBy: row.canceled_by
 });
+const conversationFromRow = (row: QueryResultRow): MatchConversation => ({ id: row.id, userId: row.user_id, intent: row.intent as MatchConversationIntent, createdAt: toIso(row.created_at), updatedAt: toIso(row.updated_at), expiresAt: toIso(row.expires_at) });
 
 export class PostgresStore implements SocialStore {
   constructor(private readonly pool: Pool) {}
@@ -61,6 +62,15 @@ export class PostgresStore implements SocialStore {
   async updateMeetingProposalStatus(proposalId: string, expectedStatus: ProposalStatus, update: Pick<MeetingProposal, "status" | "respondedAt" | "canceledBy">): Promise<MeetingProposal | undefined> {
     const result = await this.pool.query("UPDATE meeting_proposals SET status = $3, responded_at = $4, canceled_by = $5 WHERE id = $1 AND status = $2 RETURNING *", [proposalId, expectedStatus, update.status, update.respondedAt, update.canceledBy]);
     return result.rows[0] ? proposalFromRow(result.rows[0]) : undefined;
+  }
+  async getMatchConversation(conversationId: string, userId: string, clock: Date = new Date()): Promise<MatchConversation | undefined> {
+    const result = await this.pool.query("SELECT * FROM match_conversations WHERE id = $1 AND user_id = $2 AND expires_at > $3", [conversationId, userId, clock.toISOString()]);
+    return result.rows[0] ? conversationFromRow(result.rows[0]) : undefined;
+  }
+  async saveMatchConversation(conversation: MatchConversation): Promise<MatchConversation> {
+    await this.ensureUser(conversation.userId);
+    const result = await this.pool.query("INSERT INTO match_conversations (id,user_id,intent,created_at,updated_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET intent=EXCLUDED.intent, updated_at=EXCLUDED.updated_at, expires_at=EXCLUDED.expires_at WHERE match_conversations.user_id = EXCLUDED.user_id RETURNING *", [conversation.id, conversation.userId, conversation.intent, conversation.createdAt, conversation.updatedAt, conversation.expiresAt]);
+    return conversationFromRow(result.rows[0]);
   }
   async withUserLocks<T>(userIds: string[], operation: () => Promise<T> | T): Promise<T> {
     const client = await this.pool.connect();

@@ -57,3 +57,21 @@ export type MeetingProposal = {
 };
 
 export type UserMatchView = { userId: string; nickname: string; grade: string; schoolId: string; campusId: string; campusName: string; activities: string[]; interests: string[]; languages: { speaks: string[]; learning: string[] }; isDiscoverable: boolean; minimumMeetingMinutes: number; isActive: boolean };
+
+export type MatchConversationIntent = {
+  date: string | null;
+  dayOfWeek: DayOfWeek | null;
+  startTime: string | null;
+  durationMinutes: number | null;
+  budget: (typeof PRICE_RANGES)[number] | null;
+  atmosphere: (typeof ATMOSPHERES)[number] | null;
+};
+
+export type MatchConversation = {
+  id: string;
+  userId: string;
+  intent: MatchConversationIntent;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+};

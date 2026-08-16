@@ -26,7 +26,7 @@ GET /api/v1/venues/recommendations?campusId=campus_yonsei_sinchon&date=2026-08-1
 - 60분 이하이면 도보 5분 이내와 `QUICK_MEAL` 태그를 우선한다.
 - 90분 이상이면 `GOOD_FOR_TALKING` 또는 `RELAXED` 태그를 가산한다.
 - 예산·분위기 입력이 있으면 일치 장소를 가산한다.
-- 조건 통과 후보를 최대 3개 반환한다.
+- 규칙 기반 후보 상위 30개를 AI가 재정렬해 최대 3개 반환한다. AI 호출 실패 시 기존 규칙 순위를 사용한다.
 - 동점은 도보 시간, 장소 ID 순이다.
 
 ### Success `200 OK`
@@ -77,8 +77,7 @@ GET /api/v1/venues/recommendations?campusId=campus_yonsei_sinchon&date=2026-08-1
 ## 데이터와 AI 경계
 
 - 장소명·카테고리·도보 시간·가격대·태그는 seed 데이터에서만 가져온다.
-- LLM은 새 장소 또는 사실을 생성할 수 없다.
-- LLM은 선택된 장소의 한 문장 이유만 다듬을 수 있다.
+- LLM은 사전 검수된 후보 장소만 최대 3개 선택하고, 제공된 사실만으로 한 문장 이유를 생성한다.
 - 실패 시 템플릿을 사용한다.
 - 실시간 영업·좌석 여부를 보장하는 필드를 반환하지 않는다.
 
