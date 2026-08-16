@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Campus, MatchPreference, PreferredSlot, Profile, Schedule, School, User } from "./domain/types.js";
 
-export type StoreData = { users: User[]; schools: School[]; campuses: Campus[]; profiles: Profile[]; preferences: MatchPreference[]; schedules: Schedule[]; availability: Record<string, PreferredSlot[]> };
+export type StoreData = { users: User[]; schools: School[]; campuses: Campus[]; profiles: Profile[]; preferences: MatchPreference[]; schedules: Schedule[]; availability: Record<string, PreferredSlot[]>; availabilityUpdatedAt: Record<string, string> };
 
 export const now = (): string => new Date().toISOString();
 
@@ -9,7 +9,7 @@ export class MemoryStore {
   private data: StoreData;
 
   constructor(initial: Partial<StoreData> = {}) {
-    this.data = { users: [], schools: [], campuses: [], profiles: [], preferences: [], schedules: [], availability: {}, ...initial };
+    this.data = { users: [], schools: [], campuses: [], profiles: [], preferences: [], schedules: [], availability: {}, availabilityUpdatedAt: {}, ...initial };
   }
 
   ensureUser(userId: string): User {
@@ -34,7 +34,8 @@ export class MemoryStore {
   updateSchedule(scheduleId: string, update: Partial<Omit<Schedule, "id" | "userId" | "createdAt" | "updatedAt">>): Schedule | undefined { const current = this.data.schedules.find((item) => item.id === scheduleId); if (!current) return undefined; const result = { ...current, ...update, updatedAt: now() }; this.data = { ...this.data, schedules: this.data.schedules.map((item) => item.id === scheduleId ? result : item) }; return result; }
   deleteSchedule(scheduleId: string): boolean { const previousLength = this.data.schedules.length; this.data = { ...this.data, schedules: this.data.schedules.filter((item) => item.id !== scheduleId) }; return previousLength !== this.data.schedules.length; }
   getAvailability(userId: string): PreferredSlot[] { return this.data.availability[userId] ?? []; }
-  saveAvailability(userId: string, slots: PreferredSlot[]): PreferredSlot[] { this.ensureUser(userId); this.data = { ...this.data, availability: { ...this.data.availability, [userId]: slots } }; return slots; }
+  getAvailabilityUpdatedAt(userId: string): string { return this.data.availabilityUpdatedAt[userId] ?? now(); }
+  saveAvailability(userId: string, slots: PreferredSlot[]): PreferredSlot[] { this.ensureUser(userId); this.data = { ...this.data, availability: { ...this.data.availability, [userId]: slots }, availabilityUpdatedAt: { ...this.data.availabilityUpdatedAt, [userId]: now() } }; return slots; }
   getUser(userId: string): User | undefined { return this.data.users.find((user) => user.id === userId); }
   listProfilesAtCampus(campusId: string): Profile[] { return this.data.profiles.filter((profile) => profile.campusId === campusId); }
 }

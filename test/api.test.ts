@@ -5,7 +5,7 @@ import { createSeedStore } from "../src/store.js";
 
 const authenticated = () => {
   const app = createApp({ store: createSeedStore() });
-  return { get: (path: string) => request(app).get(path).set("authorization", "Bearer demo:user_a"), post: (path: string) => request(app).post(path).set("authorization", "Bearer demo:user_a"), put: (path: string) => request(app).put(path).set("authorization", "Bearer demo:user_a") };
+  return { get: (path: string) => request(app).get(path).set("authorization", "Bearer demo:user_a"), post: (path: string) => request(app).post(path).set("authorization", "Bearer demo:user_a"), put: (path: string) => request(app).put(path).set("authorization", "Bearer demo:user_a"), patch: (path: string) => request(app).patch(path).set("authorization", "Bearer demo:user_a"), delete: (path: string) => request(app).delete(path).set("authorization", "Bearer demo:user_a") };
 };
 
 describe("Core Time API", () => {
@@ -41,5 +41,16 @@ describe("Core Time API", () => {
     expect(response.status).toBe(200);
     expect(response.body.data.preferredSlots).toEqual([{ dayOfWeek: "MONDAY", startTime: "11:00", endTime: "14:00" }]);
     expect(response.body.data.effectiveSlots).toEqual([{ dayOfWeek: "MONDAY", startTime: "11:00", endTime: "12:00", durationMinutes: 60 }, { dayOfWeek: "MONDAY", startTime: "13:00", endTime: "14:00", durationMinutes: 60 }]);
+  });
+
+  it("updates and deletes only the current user's schedule", async () => {
+    const client = authenticated();
+    const created = await client.post("/api/v1/me/schedules").send({ dayOfWeek: "TUESDAY", subjectName: "수업", startTime: "11:00", endTime: "12:00", classroom: "101" });
+    const scheduleId = created.body.data.id;
+    const updated = await client.patch(`/api/v1/me/schedules/${scheduleId}`).send({ startTime: "12:00", endTime: "13:00", classroom: null });
+    expect(updated.body.data).toMatchObject({ startTime: "12:00", endTime: "13:00", classroom: null });
+    await client.delete(`/api/v1/me/schedules/${scheduleId}`).expect(204);
+    const schedules = await client.get("/api/v1/me/schedules");
+    expect(schedules.body.data).toEqual([]);
   });
 });

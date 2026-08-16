@@ -27,7 +27,7 @@ function hasOverlap(candidate: Pick<Schedule, "dayOfWeek" | "startTime" | "endTi
 function availabilityResponse(store: MemoryStore, userId: string) {
   const preferredSlots = store.getAvailability(userId);
   const effectiveSlots = calculateEffectiveSlots(calculateFreeSlots(store.listSchedules(userId), 30), preferredSlots);
-  return { preferredSlots, effectiveSlots, updatedAt: now() };
+  return { preferredSlots, effectiveSlots, updatedAt: store.getAvailabilityUpdatedAt(userId) };
 }
 
 export function createScheduleRouter(store: MemoryStore): Router {
