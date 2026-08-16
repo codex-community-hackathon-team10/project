@@ -1,13 +1,7 @@
-# Lunch Mate backend
+# Campus Mate
 
-## Local database
+공강 기반 캠퍼스 점심 메이트 서비스입니다.
 
-```bash
-docker compose up -d
-export DATABASE_URL=postgres://lunch_mate:lunch_mate_dev@localhost:5432/lunch_mate
-npm run migrate
-npm run seed
-npm start
-```
-
-테스트는 외부 DB 없이 인메모리 저장소를 사용한다. 로컬 API 데모 인증 헤더는 `Authorization: Bearer demo:user_a` 형식이다.
+- 백엔드 실행: [`backend/README.md`](./backend/README.md)
+- API 계약: [`docs/api/README.md`](./docs/api/README.md)
+- 백엔드 병렬 개발 가이드: [`docs/backend/README.md`](./docs/backend/README.md)
