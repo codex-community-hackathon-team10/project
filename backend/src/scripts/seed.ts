@@ -4,7 +4,14 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required. Run npm run migrate first.");
 const pool = new Pool({ connectionString: databaseUrl });
 
-const nicknames = ["민지", "Alex", "지호", "서연", "하준", "유나", "도윤", "수아", "현우", "지민", "준서", "채원", "시우", "예린", "민준", "다은", "건우", "나연", "우진", "소민", "정우", "가은", "태윤", "은서", "승민", "하윤", "재현", "보민", "성훈", "아린"];
+const featuredNicknames = ["민지", "Alex", "지호", "서연", "하준", "유나", "도윤", "수아", "현우", "지민", "준서", "채원", "시우", "예린", "민준", "다은", "건우", "나연", "우진", "소민", "정우", "가은", "태윤", "은서", "승민", "하윤", "재현", "보민", "성훈", "아린"];
+const familyNames = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임"];
+const givenNames = ["지우", "서현", "도현", "예원", "주원", "유진", "선우"];
+const nicknames = Array.from({ length: 100 }, (_, index) => {
+  const featuredNickname = featuredNicknames[index];
+  if (featuredNickname) return featuredNickname;
+  return `${familyNames[index % familyNames.length]}${givenNames[Math.floor((index - featuredNicknames.length) / familyNames.length)]}`;
+});
 const majors = ["컴퓨터과학과", "경영학과", "심리학과", "경제학과", "국어국문학과", "전기전자공학과", "사회학과", "생명공학과", "디자인학과", "정치외교학과"];
 const interestPool = ["MUSIC", "TRAVEL", "MOVIES", "BOOKS", "GAMES", "SPORTS", "FOOD", "CULTURE", "TECH", "CAREER"];
 const demoUsers = nicknames.map((nickname, index) => ({
