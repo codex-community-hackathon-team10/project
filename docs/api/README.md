@@ -25,6 +25,7 @@
 | [02-schedules.md](./02-schedules.md) | 수업 CRUD, 공강, 선호 시간 |
 | [03-matches.md](./03-matches.md) | 추천 필터·점수·카드 |
 | [04-venues.md](./04-venues.md) | 사전 검수 장소 추천 |
+| [06-match-conversations.md](./06-match-conversations.md) | 채팅 기반 AI 매칭 |
 | [05-meeting-proposals.md](./05-meeting-proposals.md) | 제안 생성·조회·상태 변경·약속 뷰 |
 
 ## P0 엔드포인트
@@ -59,6 +60,7 @@
 |---|---|---|
 | `GET` | `/matches` | 공통 공강 메이트 추천 |
 | `GET` | `/venues/recommendations` | 장소 최대 3개 추천 |
+| `POST` | `/match-conversations/messages` | 자연어 AI 매칭 |
 | `POST` | `/meeting-proposals` | 점심 만남 제안 생성 |
 | `GET` | `/meeting-proposals` | 받은·보낸 제안과 약속 조회 |
 | `PATCH` | `/meeting-proposals/{proposalId}/status` | 수락·거절·취소 |
@@ -88,4 +90,4 @@
 - 제안 생성과 수락 시 확정 약속 충돌을 모두 검사한다.
 - 같은 날짜에 서로 다른 최대 2명에게만 `PENDING` 또는 `ACCEPTED` 제안을 유지할 수 있게 한다.
 - `MeetingProposal`이 약속 상태의 단일 원본이다.
-- AI는 추천 이유만 다듬으며 실패 시 템플릿을 반환한다.
+- 채팅 추천은 안전 필터·규칙 점수 상위 50명 안에서 AI가 최대 5명을 재정렬하며, 실패 시 규칙 순위와 템플릿을 반환한다.

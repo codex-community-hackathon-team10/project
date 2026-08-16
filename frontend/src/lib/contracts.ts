@@ -19,6 +19,7 @@ export type Match = {
   grade: string;
   campus: { id: string; name: string };
   commonSlots: TimeSlot[];
+  selectedSlot?: TimeSlot & { nextDate: string };
   commonActivities: string[];
   commonInterests: string[];
   score: number;
@@ -37,6 +38,7 @@ export type Venue = {
   tags: string[];
   description: string;
   recommendationReason: string;
+  reasonSource?: "AI" | "TEMPLATE";
 };
 export type Proposal = {
   id: string;
@@ -123,15 +125,32 @@ export type UpdateProfileInput = {
   languages: Profile["languages"];
 };
 
+export type School = { id: string; name: string };
+export type Campus = { id: string; schoolId: string; name: string; timeZone: string };
+export type ProfileOptions = {
+  grades: Array<"1" | "2" | "3" | "4" | "OTHER">;
+  studentTypes: Profile["studentType"][];
+  activities: string[];
+  interests: string[];
+  minimumMeetingMinutes: Array<30 | 60 | 90 | 120>;
+};
+
 /** AI가 자연어 요청을 파싱하고 기존 추천 규칙을 실행한 결과입니다. */
+export type MatchChatIntent = {
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
+  activity: "LUNCH";
+  budget?: Venue["priceRange"];
+  atmosphere?: "QUICK_MEAL" | "GOOD_FOR_TALKING" | "RELAXED";
+  missingFields: string[];
+};
+
 export type MatchChatResponse = {
+  conversationId: string;
+  status: "NEEDS_CLARIFICATION" | "MATCHES_FOUND" | "NO_MATCHES" | "FALLBACK";
   assistantMessage: string;
-  parsedIntent: {
-    date?: string;
-    startTime?: string;
-    endTime?: string;
-    activity: "LUNCH";
-    missingFields: string[];
-  };
+  parsedIntent: MatchChatIntent;
   matches: Match[];
 };

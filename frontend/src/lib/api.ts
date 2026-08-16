@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ApiResponse, Availability, CreateProposalInput, FreeTimes, Match, MatchChatResponse, MatchPreference, Page, PreferredSlot, Profile, Proposal, ProposalStatus, ScheduleRecord, UpdateProfileInput, Venue } from "./contracts";
+import type { ApiErrorBody, ApiResponse, Availability, Campus, CreateProposalInput, FreeTimes, Match, MatchChatResponse, MatchPreference, Page, PreferredSlot, Profile, ProfileOptions, Proposal, ProposalStatus, ScheduleRecord, School, UpdateProfileInput, Venue } from "./contracts";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "";
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === "true";
@@ -29,7 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const mockMatch: Match = {
   userId: "user_b", nickname: "Alex", grade: "3", campus: { id: "campus_yonsei_sinchon", name: "신촌캠퍼스" },
   commonSlots: [{ dayOfWeek: "MONDAY", startTime: "12:00", endTime: "13:30", durationMinutes: 90, nextDate: "2026-08-17" }],
-  commonActivities: ["LUNCH", "LANGUAGE_EXCHANGE"], commonInterests: ["MUSIC", "TRAVEL"], score: 71,
+  commonActivities: ["LUNCH", "LANGUAGE_EXCHANGE"], commonInterests: ["MUSIC", "TRAVEL"], selectedSlot: { dayOfWeek: "MONDAY", startTime: "12:00", endTime: "13:30", durationMinutes: 90, nextDate: "2026-08-17" }, score: 71,
   reasons: [{ type: "COMMON_TIME", label: "공통 가능 시간 90분", score: 30 }],
   summary: "월요일 12:00~13:30에 90분 동안 만날 수 있고, 두 분 모두 점심을 선호해요.", summarySource: "TEMPLATE",
 };
@@ -63,10 +63,9 @@ let mockProposals: Proposal[] = [
 
 export const api = {
   getMatches: () => useMockApi ? Promise.resolve({ data: [mockMatch], meta: { hasNext: false, nextCursor: null } } satisfies Page<Match>) : request<Page<Match>>("/matches?limit=20"),
-  sendMatchChat: (message: string) => {
-    // AI parsing endpoint is not implemented yet. In live mode, use the existing server-side match engine.
-    if (!useMockApi) return api.getMatches().then((response) => ({ data: { assistantMessage: response.data.length ? `공강이 겹치는 ${response.data.length}명의 메이트를 찾았어요. 가장 잘 맞는 결과를 보여드릴게요.` : "조건에 맞는 메이트를 찾지 못했어요. 시간을 조금 넓혀 보세요.", parsedIntent: { activity: "LUNCH", missingFields: [] }, matches: response.data } satisfies MatchChatResponse }));
-    return Promise.resolve({ data: { assistantMessage: "월요일 12:00~13:30에 점심을 함께할 수 있는 Alex님을 찾았어요. 장소까지 골라 제안을 보낼 수 있어요.", parsedIntent: { date: "2026-08-17", startTime: "12:00", endTime: "13:30", activity: "LUNCH", missingFields: [] }, matches: [mockMatch] } } satisfies ApiResponse<MatchChatResponse>);
+  sendMatchChat: (message: string, conversationId?: string) => {
+    if (!useMockApi) return request<ApiResponse<MatchChatResponse>>("/match-conversations/messages", { method: "POST", body: JSON.stringify({ message, ...(conversationId ? { conversationId } : {}) }) });
+    return Promise.resolve({ data: { conversationId: conversationId ?? "mock-conversation", status: "MATCHES_FOUND", assistantMessage: "월요일 12:00~13:30에 점심을 함께할 수 있는 Alex님을 찾았어요. 장소까지 골라 제안을 보낼 수 있어요.", parsedIntent: { date: "2026-08-17", startTime: "12:00", endTime: "13:30", durationMinutes: 90, activity: "LUNCH", missingFields: [] }, matches: [mockMatch] } } satisfies ApiResponse<MatchChatResponse>);
   },
   getSchedules: () => useMockApi ? Promise.resolve({ data: mockSchedules } satisfies ApiResponse<ScheduleRecord[]>) : request<ApiResponse<ScheduleRecord[]>>("/me/schedules"),
   createSchedule: (input: Omit<ScheduleRecord, "id" | "createdAt" | "updatedAt">) => {
@@ -80,6 +79,9 @@ export const api = {
     mockPreferences = { ...input, updatedAt: new Date().toISOString() }; return Promise.resolve({ data: mockPreferences });
   },
   getProfile: () => useMockApi ? Promise.resolve({ data: mockProfile } satisfies ApiResponse<Profile>) : request<ApiResponse<Profile>>("/me/profile"),
+  getSchools: () => useMockApi ? Promise.resolve({ data: [mockProfile.school] } satisfies ApiResponse<School[]>) : request<ApiResponse<School[]>>("/schools"),
+  getCampuses: (schoolId: string) => useMockApi ? Promise.resolve({ data: [{ ...mockProfile.campus, schoolId, timeZone: "Asia/Seoul" }] } satisfies ApiResponse<Campus[]>) : request<ApiResponse<Campus[]>>(`/schools/${schoolId}/campuses`),
+  getProfileOptions: () => useMockApi ? Promise.resolve({ data: { grades: ["1", "2", "3", "4", "OTHER"], studentTypes: ["DOMESTIC", "INTERNATIONAL", "EXCHANGE", "OTHER"], activities: ["LUNCH", "CAFE", "STUDY", "LANGUAGE_EXCHANGE"], interests: ["MUSIC", "TRAVEL", "MOVIES", "BOOKS", "GAMES", "SPORTS", "FOOD", "CULTURE", "TECH", "CAREER"], minimumMeetingMinutes: [30, 60, 90, 120] } satisfies ProfileOptions }) : request<ApiResponse<ProfileOptions>>("/profile-options"),
   updateProfile: (input: UpdateProfileInput) => {
     if (!useMockApi) return request<ApiResponse<Profile>>("/me/profile", { method: "PUT", body: JSON.stringify(input) });
     mockProfile = { ...mockProfile, ...input, school: { ...mockProfile.school, id: input.schoolId }, campus: { ...mockProfile.campus, id: input.campusId }, updatedAt: new Date().toISOString() };

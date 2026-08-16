@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Campus, MatchPreference, MeetingProposal, PreferredSlot, Profile, ProposalStatus, Schedule, School, User, Venue } from "./domain/types.js";
+import type { Campus, MatchConversation, MatchPreference, MeetingProposal, PreferredSlot, Profile, ProposalStatus, Schedule, School, User, Venue } from "./domain/types.js";
 
 export type StoreData = {
   users: User[];
@@ -12,6 +12,7 @@ export type StoreData = {
   availabilityUpdatedAt: Record<string, string>;
   venues: Venue[];
   meetingProposals: MeetingProposal[];
+  matchConversations: MatchConversation[];
 };
 
 export const now = (): string => new Date().toISOString();
@@ -22,7 +23,7 @@ export class MemoryStore {
 
   constructor(initial: Partial<StoreData> = {}) {
     this.data = {
-      users: [], schools: [], campuses: [], profiles: [], preferences: [], schedules: [], availability: {}, availabilityUpdatedAt: {}, venues: [], meetingProposals: [], ...initial
+      users: [], schools: [], campuses: [], profiles: [], preferences: [], schedules: [], availability: {}, availabilityUpdatedAt: {}, venues: [], meetingProposals: [], matchConversations: [], ...initial
     };
   }
 
@@ -69,6 +70,15 @@ export class MemoryStore {
     this.data = { ...this.data, meetingProposals: this.data.meetingProposals.map((proposal) => proposal.id === proposalId ? result : proposal) };
     return result;
   }
+  async getMatchConversation(conversationId: string, userId: string, clock: Date = new Date()): Promise<MatchConversation | undefined> {
+    const conversation = this.data.matchConversations.find((item) => item.id === conversationId && item.userId === userId);
+    return conversation && new Date(conversation.expiresAt).getTime() > clock.getTime() ? conversation : undefined;
+  }
+  async saveMatchConversation(conversation: MatchConversation): Promise<MatchConversation> {
+    await this.ensureUser(conversation.userId);
+    this.data = { ...this.data, matchConversations: [...this.data.matchConversations.filter((item) => item.id !== conversation.id), conversation] };
+    return conversation;
+  }
 
   async withUserLocks<T>(userIds: string[], operation: () => Promise<T> | T): Promise<T> {
     const locks: { key: string; queued: Promise<void>; release: () => void }[] = [];
@@ -98,6 +108,7 @@ export type CoreStore = Pick<MemoryStore,
 
 export type SocialStore = CoreStore & Pick<MemoryStore,
   "listActiveVenues" | "getActiveVenue" | "getMeetingProposal" | "listMeetingProposalsForUser" | "createMeetingProposal" | "updateMeetingProposalStatus" | "withUserLocks"
+  | "getMatchConversation" | "saveMatchConversation"
 >;
 
 export function createSeedStore(): MemoryStore {
@@ -119,6 +130,7 @@ export function seedStoreData(): StoreData {
       { id: "venue_rice_bowl", campusId: "campus_yonsei_sinchon", name: "캠퍼스 앞 덮밥집", category: "RESTAURANT", walkMinutes: 6, priceRange: "UNDER_10000", tags: ["GOOD_FOR_TALKING"], description: "든든한 한 끼를 먹기 좋은 식당", isActive: true },
       { id: "venue_campus_cafe", campusId: "campus_yonsei_sinchon", name: "캠퍼스 카페", category: "CAFE", walkMinutes: 4, priceRange: "AROUND_15000", tags: ["GOOD_FOR_TALKING", "RELAXED"], description: "식사 후 대화하기 좋은 카페", isActive: true }
     ],
-    meetingProposals: []
+    meetingProposals: [],
+    matchConversations: []
   };
 }
