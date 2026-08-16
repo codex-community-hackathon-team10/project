@@ -7,7 +7,7 @@ export class ApiError extends Error {
   }
 }
 
-export const asyncRoute = (handler: (request: Request, response: Response, next: NextFunction) => Promise<void> | void) => (request: Request, response: Response, next: NextFunction) => Promise.resolve(handler(request, response, next)).catch(next);
+export const asyncRoute = (handler: (request: Request, response: Response, next: NextFunction) => Promise<unknown> | unknown) => (request: Request, response: Response, next: NextFunction) => Promise.resolve(handler(request, response, next)).catch(next);
 
 export function errorHandler(error: unknown, request: Request, response: Response, _next: NextFunction): void {
   const requestId = request.header("x-request-id") ?? crypto.randomUUID();

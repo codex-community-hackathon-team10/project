@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "express": "^5.1.0",
+    "pg": "^8.16.3",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",
     "@types/node": "^22.15.3",
+    "@types/pg": "^8.15.4",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.1.0",
     "tsx": "^4.19.3",

@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, is_active BOOLEAN NOT NULL DEFAULT true);
+CREATE TABLE IF NOT EXISTS schools (id TEXT PRIMARY KEY, name TEXT NOT NULL, is_active BOOLEAN NOT NULL DEFAULT true);
+CREATE TABLE IF NOT EXISTS campuses (id TEXT PRIMARY KEY, school_id TEXT NOT NULL REFERENCES schools(id), name TEXT NOT NULL, time_zone TEXT NOT NULL DEFAULT 'Asia/Seoul', is_active BOOLEAN NOT NULL DEFAULT true);
+CREATE TABLE IF NOT EXISTS profiles (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, school_id TEXT NOT NULL REFERENCES schools(id), campus_id TEXT NOT NULL REFERENCES campuses(id), nickname TEXT NOT NULL UNIQUE, major TEXT NOT NULL, grade TEXT NOT NULL, student_type TEXT NOT NULL, activities TEXT[] NOT NULL, interests TEXT[] NOT NULL, languages JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE IF NOT EXISTS match_preferences (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, is_discoverable BOOLEAN NOT NULL DEFAULT true, minimum_meeting_minutes SMALLINT NOT NULL CHECK (minimum_meeting_minutes IN (30,60,90,120)), updated_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE IF NOT EXISTS class_schedules (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day_of_week TEXT NOT NULL CHECK (day_of_week IN ('MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY')), subject_name TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, classroom TEXT, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE IF NOT EXISTS availability_slots (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day_of_week TEXT NOT NULL CHECK (day_of_week IN ('MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY')), start_time TEXT NOT NULL, end_time TEXT NOT NULL, PRIMARY KEY (user_id, day_of_week, start_time, end_time));
+CREATE TABLE IF NOT EXISTS availability_updates (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, updated_at TIMESTAMPTZ NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_profiles_campus ON profiles(campus_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_user_day ON class_schedules(user_id, day_of_week, start_time);

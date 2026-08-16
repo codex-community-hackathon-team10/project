@@ -1,6 +1,9 @@
-import { mkdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { Pool } from "pg";
 
-// HACK: P0 uses the in-memory adapter. Keeping this command makes replacing it
-// with the shared production database migration a single script change.
-await mkdir("data", { recursive: true });
-console.info("Migration complete (demo in-memory schema).");
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is required. Start PostgreSQL with docker compose up -d.");
+const pool = new Pool({ connectionString: databaseUrl });
+await pool.query(await readFile("db/migrations/001_core_time.sql", "utf8"));
+await pool.end();
+console.info("Migration complete.");

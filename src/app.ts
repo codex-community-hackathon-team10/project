@@ -3,9 +3,9 @@ import { createConfiguredTokenVerifier, requireAuth, type TokenVerifier } from "
 import { errorHandler } from "./http/errors.js";
 import { createProfileRouter } from "./http/profile-routes.js";
 import { createScheduleRouter } from "./http/schedule-routes.js";
-import { createSeedStore, type MemoryStore } from "./store.js";
+import { createSeedStore, type CoreStore } from "./store.js";
 
-export function createApp(options: { store?: MemoryStore; tokenVerifier?: TokenVerifier } = {}) {
+export function createApp(options: { store?: CoreStore; tokenVerifier?: TokenVerifier } = {}) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "32kb" }));
