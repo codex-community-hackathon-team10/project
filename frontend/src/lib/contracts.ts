@@ -1,0 +1,62 @@
+/** docs/api 명세를 기준으로 한 UI 전용 계약 타입입니다. */
+export type DayOfWeek = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY";
+export type ProposalStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELED";
+
+export type ApiErrorBody = {
+  code: string;
+  message: string;
+  fieldErrors: Array<{ field: string; reason: string }>;
+  requestId?: string;
+};
+
+export type Page<T> = { data: T[]; meta: { hasNext: boolean; nextCursor: string | null; [key: string]: unknown } };
+export type ApiResponse<T> = { data: T };
+export type TimeSlot = { dayOfWeek: DayOfWeek; startTime: string; endTime: string; durationMinutes: number; nextDate?: string };
+
+export type Match = {
+  userId: string;
+  nickname: string;
+  grade: string;
+  campus: { id: string; name: string };
+  commonSlots: TimeSlot[];
+  commonActivities: string[];
+  commonInterests: string[];
+  score: number;
+  reasons: Array<{ type: string; label: string; score: number }>;
+  summary: string;
+  summarySource: "AI" | "TEMPLATE";
+};
+
+export type Venue = {
+  id: string;
+  campusId: string;
+  name: string;
+  category: "RESTAURANT" | "CAFE" | "STUDY_SPACE";
+  walkMinutes: number;
+  priceRange: "UNDER_10000" | "AROUND_15000" | "FLEXIBLE";
+  tags: string[];
+  description: string;
+  recommendationReason: string;
+};
+export type Proposal = {
+  id: string;
+  role: "SENT" | "RECEIVED";
+  counterpart: { id: string; nickname: string };
+  date: string;
+  startTime: string;
+  endTime: string;
+  activity: "LUNCH";
+  venue: { type: "RECOMMENDED" | "CUSTOM"; venueId?: string; name: string; walkMinutes?: number; priceRange?: string };
+  status: ProposalStatus;
+  createdAt: string;
+};
+
+export type CreateProposalInput = {
+  receiverId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  activity: "LUNCH";
+  venue: { type: "RECOMMENDED"; venueId: string } | { type: "CUSTOM"; name: string };
+  message: string | null;
+};
