@@ -60,3 +60,16 @@ export type CreateProposalInput = {
   venue: { type: "RECOMMENDED"; venueId: string } | { type: "CUSTOM"; name: string };
   message: string | null;
 };
+
+/** AI가 자연어 요청을 파싱하고 기존 추천 규칙을 실행한 결과입니다. */
+export type MatchChatResponse = {
+  assistantMessage: string;
+  parsedIntent: {
+    date?: string;
+    startTime?: string;
+    endTime?: string;
+    activity: "LUNCH";
+    missingFields: string[];
+  };
+  matches: Match[];
+};
