@@ -6,7 +6,7 @@ export const SERVICE_END = 15 * 60;
 type Interval = { start: number; end: number };
 
 export function parseTime(value: string): number | null {
-  const matched = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/.exec(value);
+  const matched = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(value);
   if (!matched) return null;
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
