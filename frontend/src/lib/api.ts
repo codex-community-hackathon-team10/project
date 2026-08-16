@@ -1,8 +1,8 @@
-import type { ApiErrorBody, ApiResponse, CreateProposalInput, Match, MatchChatResponse, Page, Proposal, ProposalStatus, Venue } from "./contracts";
+import type { ApiErrorBody, ApiResponse, Availability, CreateProposalInput, FreeTimes, Match, MatchChatResponse, MatchPreference, Page, PreferredSlot, Profile, Proposal, ProposalStatus, ScheduleRecord, UpdateProfileInput, Venue } from "./contracts";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "";
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === "true";
-let accessToken: string | null = null;
+let accessToken: string | null = import.meta.env.VITE_DEMO_ACCESS_TOKEN ?? null;
 
 export class ApiError extends Error {
   constructor(public readonly status: number, public readonly body: ApiErrorBody) {
@@ -41,6 +41,22 @@ const mockVenues: Venue[] = [
 ];
 
 let mockProposalId = 2;
+let mockScheduleId = 3;
+let mockPreferences: MatchPreference = { isDiscoverable: true, minimumMeetingMinutes: 60, updatedAt: "2026-08-16T06:15:00Z" };
+let mockProfile: Profile = {
+  userId: "user_a", school: { id: "school_yonsei", name: "연세대학교" }, campus: { id: "campus_yonsei_sinchon", name: "신촌캠퍼스" },
+  nickname: "민지", major: "컴퓨터과학과", grade: "3", studentType: "DOMESTIC", activities: ["LUNCH"], interests: ["MUSIC", "TRAVEL"],
+  languages: { speaks: ["KO"], learning: ["EN"] }, isComplete: true, updatedAt: "2026-08-16T06:15:00Z",
+};
+let mockAvailability: Availability = {
+  preferredSlots: [{ dayOfWeek: "MONDAY", startTime: "12:00", endTime: "14:00" }],
+  effectiveSlots: [{ dayOfWeek: "MONDAY", startTime: "12:00", endTime: "14:00", durationMinutes: 120 }],
+  updatedAt: "2026-08-16T06:15:00Z",
+};
+let mockSchedules: ScheduleRecord[] = [
+  { id: "schedule_01", dayOfWeek: "MONDAY", subjectName: "통계학", startTime: "11:00", endTime: "12:00", classroom: null, createdAt: "2026-08-16T06:20:00Z", updatedAt: "2026-08-16T06:20:00Z" },
+  { id: "schedule_02", dayOfWeek: "WEDNESDAY", subjectName: "웹프로그래밍", startTime: "13:00", endTime: "14:30", classroom: null, createdAt: "2026-08-16T06:20:00Z", updatedAt: "2026-08-16T06:20:00Z" },
+];
 let mockProposals: Proposal[] = [
   { id: "proposal_01", role: "RECEIVED", counterpart: { id: "user_c", nickname: "서연" }, date: "2026-08-20", startTime: "12:00", endTime: "13:00", activity: "LUNCH", venue: { type: "RECOMMENDED", venueId: "venue_student_hall", name: "학생회관 식당", walkMinutes: 3, priceRange: "UNDER_10000" }, status: "PENDING", createdAt: "2026-08-16T06:40:00Z" },
 ];
@@ -48,8 +64,33 @@ let mockProposals: Proposal[] = [
 export const api = {
   getMatches: () => useMockApi ? Promise.resolve({ data: [mockMatch], meta: { hasNext: false, nextCursor: null } } satisfies Page<Match>) : request<Page<Match>>("/matches?limit=20"),
   sendMatchChat: (message: string) => {
-    if (!useMockApi) return request<ApiResponse<MatchChatResponse>>("/match-conversations/messages", { method: "POST", body: JSON.stringify({ message }) });
+    // AI parsing endpoint is not implemented yet. In live mode, use the existing server-side match engine.
+    if (!useMockApi) return api.getMatches().then((response) => ({ data: { assistantMessage: response.data.length ? `공강이 겹치는 ${response.data.length}명의 메이트를 찾았어요. 가장 잘 맞는 결과를 보여드릴게요.` : "조건에 맞는 메이트를 찾지 못했어요. 시간을 조금 넓혀 보세요.", parsedIntent: { activity: "LUNCH", missingFields: [] }, matches: response.data } satisfies MatchChatResponse }));
     return Promise.resolve({ data: { assistantMessage: "월요일 12:00~13:30에 점심을 함께할 수 있는 Alex님을 찾았어요. 장소까지 골라 제안을 보낼 수 있어요.", parsedIntent: { date: "2026-08-17", startTime: "12:00", endTime: "13:30", activity: "LUNCH", missingFields: [] }, matches: [mockMatch] } } satisfies ApiResponse<MatchChatResponse>);
+  },
+  getSchedules: () => useMockApi ? Promise.resolve({ data: mockSchedules } satisfies ApiResponse<ScheduleRecord[]>) : request<ApiResponse<ScheduleRecord[]>>("/me/schedules"),
+  createSchedule: (input: Omit<ScheduleRecord, "id" | "createdAt" | "updatedAt">) => {
+    if (!useMockApi) return request<ApiResponse<ScheduleRecord>>("/me/schedules", { method: "POST", body: JSON.stringify(input) });
+    const now = new Date().toISOString(); const schedule = { ...input, id: `schedule_${mockScheduleId++}`, createdAt: now, updatedAt: now };
+    mockSchedules = [...mockSchedules, schedule]; return Promise.resolve({ data: schedule });
+  },
+  getMatchPreferences: () => useMockApi ? Promise.resolve({ data: mockPreferences } satisfies ApiResponse<MatchPreference>) : request<ApiResponse<MatchPreference>>("/me/match-preferences"),
+  updateMatchPreferences: (input: Pick<MatchPreference, "isDiscoverable" | "minimumMeetingMinutes">) => {
+    if (!useMockApi) return request<ApiResponse<MatchPreference>>("/me/match-preferences", { method: "PUT", body: JSON.stringify(input) });
+    mockPreferences = { ...input, updatedAt: new Date().toISOString() }; return Promise.resolve({ data: mockPreferences });
+  },
+  getProfile: () => useMockApi ? Promise.resolve({ data: mockProfile } satisfies ApiResponse<Profile>) : request<ApiResponse<Profile>>("/me/profile"),
+  updateProfile: (input: UpdateProfileInput) => {
+    if (!useMockApi) return request<ApiResponse<Profile>>("/me/profile", { method: "PUT", body: JSON.stringify(input) });
+    mockProfile = { ...mockProfile, ...input, school: { ...mockProfile.school, id: input.schoolId }, campus: { ...mockProfile.campus, id: input.campusId }, updatedAt: new Date().toISOString() };
+    return Promise.resolve({ data: mockProfile });
+  },
+  getFreeTimes: () => useMockApi ? Promise.resolve({ data: { serviceWindow: { startTime: "11:00", endTime: "15:00", timeZone: "Asia/Seoul" }, slots: mockAvailability.effectiveSlots, calculatedAt: new Date().toISOString() } satisfies FreeTimes }) : request<ApiResponse<FreeTimes>>("/me/free-times"),
+  getAvailability: () => useMockApi ? Promise.resolve({ data: mockAvailability } satisfies ApiResponse<Availability>) : request<ApiResponse<Availability>>("/me/availability"),
+  updateAvailability: (preferredSlots: PreferredSlot[]) => {
+    if (!useMockApi) return request<ApiResponse<Availability>>("/me/availability", { method: "PUT", body: JSON.stringify({ preferredSlots }) });
+    mockAvailability = { preferredSlots, effectiveSlots: preferredSlots.map((slot) => ({ ...slot, durationMinutes: (Number(slot.endTime.slice(0, 2)) * 60 + Number(slot.endTime.slice(3))) - (Number(slot.startTime.slice(0, 2)) * 60 + Number(slot.startTime.slice(3))) })), updatedAt: new Date().toISOString() };
+    return Promise.resolve({ data: mockAvailability });
   },
   getProposals: (query: { status?: string; role?: "SENT" | "RECEIVED" | "ALL" }) => {
     const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined) as Array<[string, string]>);

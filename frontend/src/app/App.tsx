@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
-import type { DayOfWeek, Match, Proposal, ProposalStatus, Venue } from "../lib/contracts";
+import { api, setAccessToken } from "../lib/api";
+import { hasSupabaseAuthConfig, signInWithEmail, signUpWithEmail } from "../lib/auth";
+import type { DayOfWeek, Match, PreferredSlot, Profile, Proposal, ProposalStatus, Venue } from "../lib/contracts";
 
 type Tab = "matches" | "proposals" | "schedule" | "profile";
 type Schedule = { id: string; day: DayOfWeek; subject: string; start: string; end: string };
@@ -14,7 +15,8 @@ function ShibaAvatar({ className = "" }: { className?: string }) {
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  return isAuthenticated ? <ServiceApp onSignOut={() => setIsAuthenticated(false)} /> : <AuthPage onAuthenticated={() => setIsAuthenticated(true)} />;
+  const signOut = () => { setAccessToken(null); setIsAuthenticated(false); };
+  return isAuthenticated ? <ServiceApp onSignOut={signOut} /> : <AuthPage onAuthenticated={() => setIsAuthenticated(true)} />;
 }
 
 function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
@@ -32,8 +34,8 @@ function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
     {error && <p className="error" role="alert">{error}</p>}
     {tab === "matches" && <Matches matches={matches} />}
     {tab === "proposals" && <Proposals proposals={proposals} onChange={changeStatus} />}
-    {tab === "schedule" && <ScheduleView />}
-    {tab === "profile" && <ProfileView />}
+    {tab === "schedule" && <><ScheduleView /><AvailabilityView /></>}
+    {tab === "profile" && <><ProfileView /><ProfileApiEditor /></>}
   </main></>;
 }
 
@@ -44,13 +46,19 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [error, setError] = useState("");
-  const submit = () => {
-    if (!email.includes("@") || password.length < 8) return setError("이메일과 8자 이상의 비밀번호를 확인해 주세요.");
+  const submit = async () => {
+    if (!email.includes("@") || password.length < 6) return setError("이메일과 6자 이상의 비밀번호를 확인해 주세요.");
     if (mode === "signup" && (nickname.trim().length < 2 || password !== passwordConfirm)) return setError("닉네임은 2자 이상이며, 비밀번호가 서로 같아야 해요.");
-    setError(""); onAuthenticated();
+    try {
+      setError("");
+      if (!hasSupabaseAuthConfig()) throw new Error("Supabase 인증 설정이 없습니다. backend/.env를 사용해 Docker를 다시 실행해 주세요.");
+      if (mode === "login") await signInWithEmail(email, password);
+      else await signUpWithEmail(email, password, nickname.trim());
+      onAuthenticated();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "인증에 실패했어요."); }
   };
   const switchMode = (next: "login" | "signup") => { setMode(next); setError(""); };
-  return <main className="auth-page"><section className="auth-intro"><p className="eyebrow">LUNCH MATE</p><h1>점심 공강,<br /><em>혼자 보내지 마세요.</em></h1><p>같은 캠퍼스에서 공강이 겹치는 친구를 만나 보세요.</p><ul><li>같은 캠퍼스의 메이트 추천</li><li>공통 공강 시간으로 안전한 제안</li><li>시간에 맞는 점심 장소 추천</li></ul></section><section className="auth-card"><div className="auth-brand">LM</div><div className="auth-heading"><p className="eyebrow">{mode === "login" ? "WELCOME BACK" : "START LUNCH MATE"}</p><h2>{mode === "login" ? "다시 만나서 반가워요" : "점심 메이트를 찾아볼까요?"}</h2><p>{mode === "login" ? "로그인하고 오늘의 공강 메이트를 확인하세요." : "가입 후 프로필과 공강 시간을 설정할 수 있어요."}</p></div><div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => switchMode("login")}>로그인</button><button className={mode === "signup" ? "selected" : ""} onClick={() => switchMode("signup")}>회원가입</button></div><form onSubmit={(event) => { event.preventDefault(); submit(); }}><label>이메일<input type="email" autoComplete="email" placeholder="you@university.ac.kr" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>{mode === "signup" && <label>닉네임<input placeholder="2~20자" value={nickname} onChange={(event) => setNickname(event.target.value)} required /></label>}<label>비밀번호<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="8자 이상 입력" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{mode === "signup" && <label>비밀번호 확인<input type="password" autoComplete="new-password" placeholder="비밀번호를 다시 입력" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} required /></label>}{mode === "login" && <label className="remember"><input type="checkbox" /> 로그인 상태 유지</label>}{error && <p className="error">{error}</p>}<button className="primary full-width auth-submit" type="submit">{mode === "login" ? "로그인" : "회원가입하고 시작하기"}</button></form><p className="auth-notice">현재는 화면 목업입니다. 인증 서버 연동 시 이 폼이 실제 로그인으로 연결됩니다.</p></section></main>;
+  return <main className="auth-page"><section className="auth-intro"><p className="eyebrow">LUNCH MATE</p><h1>점심 공강,<br /><em>혼자 보내지 마세요.</em></h1><p>같은 캠퍼스에서 공강이 겹치는 친구를 만나 보세요.</p><ul><li>같은 캠퍼스의 메이트 추천</li><li>공통 공강 시간으로 안전한 제안</li><li>시간에 맞는 점심 장소 추천</li></ul></section><section className="auth-card"><div className="auth-brand">LM</div><div className="auth-heading"><p className="eyebrow">{mode === "login" ? "WELCOME BACK" : "START LUNCH MATE"}</p><h2>{mode === "login" ? "다시 만나서 반가워요" : "점심 메이트를 찾아볼까요?"}</h2><p>{mode === "login" ? "로그인하고 오늘의 공강 메이트를 확인하세요." : "가입 후 프로필과 공강 시간을 설정할 수 있어요."}</p></div><div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => switchMode("login")}>로그인</button><button className={mode === "signup" ? "selected" : ""} onClick={() => switchMode("signup")}>회원가입</button></div><form onSubmit={(event) => { event.preventDefault(); submit(); }}><label>이메일<input type="email" autoComplete="email" placeholder="you@university.ac.kr" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>{mode === "signup" && <label>닉네임<input placeholder="2~20자" value={nickname} onChange={(event) => setNickname(event.target.value)} required /></label>}<label>비밀번호<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="6자 이상 입력" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{mode === "signup" && <label>비밀번호 확인<input type="password" autoComplete="new-password" placeholder="비밀번호를 다시 입력" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} required /></label>}{mode === "login" && <label className="remember"><input type="checkbox" /> 로그인 상태 유지</label>}{error && <p className="error">{error}</p>}<button className="primary full-width auth-submit" type="submit">{mode === "login" ? "로그인" : "회원가입하고 시작하기"}</button></form><p className="auth-notice">현재는 화면 목업입니다. 인증 서버 연동 시 이 폼이 실제 로그인으로 연결됩니다.</p></section></main>;
 }
 
 function Matches({ matches }: { matches: Match[] }) {
@@ -79,21 +87,63 @@ function Actions({ proposal, onChange }: { proposal: Proposal; onChange: (id: st
 function Status({ status }: { status: ProposalStatus }) { return <span className={`status ${status.toLowerCase()}`}>{({ PENDING: "응답 대기", ACCEPTED: "약속 확정", REJECTED: "거절됨", CANCELED: "취소됨" })[status]}</span>; }
 
 function ScheduleView() {
-  const [schedules, setSchedules] = useState<Schedule[]>([{ id: "1", day: "MONDAY", subject: "통계학", start: "11:00", end: "12:00" }, { id: "2", day: "WEDNESDAY", subject: "웹프로그래밍", start: "13:00", end: "14:30" }]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [form, setForm] = useState<Omit<Schedule, "id">>({ day: "TUESDAY", subject: "", start: "12:00", end: "13:00" });
   const [message, setMessage] = useState("");
   const timeSlots = Array.from({ length: 8 }, (_, index) => `${String(11 + Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "30" : "00"}`);
   const minutes = (time: string) => { const [hour, minute] = time.split(":").map(Number); return hour * 60 + minute; };
   const position = (time: string) => (minutes(time) - 11 * 60) / 30 * 48;
-  const add = () => { if (!form.subject.trim() || form.start >= form.end) return setMessage("과목명과 올바른 시간을 입력해 주세요."); if (schedules.some((item) => item.day === form.day && form.start < item.end && item.start < form.end)) return setMessage("같은 요일의 수업 시간은 겹칠 수 없어요."); setSchedules((items) => [...items, { ...form, id: crypto.randomUUID() }]); setForm((current) => ({ ...current, subject: "" })); setMessage("수업을 추가했어요. API 연결 시 서버에 저장됩니다."); };
+  useEffect(() => { void api.getSchedules().then((response) => setSchedules(response.data.map((item) => ({ id: item.id, day: item.dayOfWeek, subject: item.subjectName, start: item.startTime, end: item.endTime })))).catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "시간표를 불러오지 못했어요.")); }, []);
+  const add = async () => { if (!form.subject.trim() || form.start >= form.end) return setMessage("과목명과 올바른 시간을 입력해 주세요."); if (schedules.some((item) => item.day === form.day && form.start < item.end && item.start < form.end)) return setMessage("같은 요일의 수업 시간은 겹칠 수 없어요."); try { const response = await api.createSchedule({ dayOfWeek: form.day, subjectName: form.subject.trim(), startTime: form.start, endTime: form.end, classroom: null }); setSchedules((items) => [...items, { id: response.data.id, day: response.data.dayOfWeek, subject: response.data.subjectName, start: response.data.startTime, end: response.data.endTime }]); setForm((current) => ({ ...current, subject: "" })); setMessage("수업을 저장했어요."); } catch (cause) { setMessage(cause instanceof Error ? cause.message : "수업을 저장하지 못했어요."); } };
   return <section><div className="section-heading"><div><p className="eyebrow">온보딩 2/3</p><h2>🗓️ 시간표와 공강</h2></div><span className="service-window">🍽️ 점심 서비스 11:00–15:00</span></div><div className="timetable" aria-label="월요일부터 금요일까지의 점심 시간표"><div className="timetable-top"><span /><div>{(Object.keys(dayLabels) as DayOfWeek[]).map((day) => <strong key={day}>{dayLabels[day]}</strong>)}</div></div><div className="timetable-body"><div className="time-axis">{timeSlots.map((time) => <span key={time}>{time}</span>)}</div><div className="timetable-days">{(Object.keys(dayLabels) as DayOfWeek[]).map((day) => <div className="timetable-day" key={day}>{schedules.filter((item) => item.day === day).map((item) => <div className="class-block" key={item.id} style={{ top: position(item.start), height: position(item.end) - position(item.start) }}><strong>{item.subject}</strong><span>{item.start}–{item.end}</span></div>)}</div>)}</div></div></div><p className="timetable-caption">☀️ 빈 칸은 점심 메이트를 만날 수 있는 공강이에요.</p><div className="add-form"><h3>수업 추가</h3><input placeholder="과목명" value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} /><select value={form.day} onChange={(event) => setForm({ ...form, day: event.target.value as DayOfWeek })}>{(Object.keys(dayLabels) as DayOfWeek[]).map((day) => <option key={day} value={day}>{dayLabels[day]}요일</option>)}</select><Time value={form.start} onChange={(start) => setForm({ ...form, start })} /><Time value={form.end} onChange={(end) => setForm({ ...form, end })} /><button className="primary" onClick={add}>추가</button></div>{message && <p className="form-message">{message}</p>}</section>;
+}
+
+function AvailabilityView() {
+  const [slots, setSlots] = useState<PreferredSlot[]>([]);
+  const [effective, setEffective] = useState(0);
+  const [form, setForm] = useState<PreferredSlot>({ dayOfWeek: "MONDAY", startTime: "12:00", endTime: "13:00" });
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    void api.getAvailability().then((response) => { setSlots(response.data.preferredSlots); setEffective(response.data.effectiveSlots.length); }).catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "선호 시간을 불러오지 못했어요."));
+  }, []);
+  const persist = async (next: PreferredSlot[]) => {
+    try { const response = await api.updateAvailability(next); setSlots(response.data.preferredSlots); setEffective(response.data.effectiveSlots.length); setMessage("선호 시간을 저장했어요."); }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : "선호 시간을 저장하지 못했어요."); }
+  };
+  const add = () => {
+    if (form.startTime >= form.endTime) return setMessage("시작 시간은 종료 시간보다 빨라야 해요.");
+    if (slots.some((slot) => slot.dayOfWeek === form.dayOfWeek && form.startTime < slot.endTime && slot.startTime < form.endTime)) return setMessage("같은 요일의 선호 시간은 겹칠 수 없어요.");
+    void persist([...slots, form]);
+  };
+  return <section className="settings-card availability-card"><div className="section-heading"><div><p className="eyebrow">MATCH AVAILABILITY</p><h2>선호 가능한 점심 시간</h2></div><span className="service-window">유효 공강 {effective}개</span></div><p className="subtle">수업이 없는 시간과 겹치는 구간만 매칭에 사용돼요.</p><div className="availability-slots">{slots.length ? slots.map((slot, index) => <span key={`${slot.dayOfWeek}-${slot.startTime}`} className="slot-chip">{dayLabels[slot.dayOfWeek]} {slot.startTime}–{slot.endTime}<button aria-label="선호 시간 삭제" onClick={() => void persist(slots.filter((_, itemIndex) => itemIndex !== index))}>×</button></span>) : <span className="subtle">아직 저장한 선호 시간이 없어요.</span>}</div><div className="add-form"><h3>시간 추가</h3><select value={form.dayOfWeek} onChange={(event) => setForm({ ...form, dayOfWeek: event.target.value as DayOfWeek })}>{(Object.keys(dayLabels) as DayOfWeek[]).map((day) => <option key={day} value={day}>{dayLabels[day]}요일</option>)}</select><Time value={form.startTime} onChange={(startTime) => setForm({ ...form, startTime })} /><Time value={form.endTime} onChange={(endTime) => setForm({ ...form, endTime })} /><button className="primary" onClick={add}>저장</button></div>{message && <p className="form-message">{message}</p>}</section>;
+}
+
+function ProfileApiEditor() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [interests, setInterests] = useState("");
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    void api.getProfile().then((response) => { setProfile(response.data); setInterests(response.data.interests.join(", ")); }).catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "프로필을 불러오지 못했어요."));
+  }, []);
+  const save = async () => {
+    if (!profile) return;
+    const selectedInterests = interests.split(",").map((item) => item.trim().toUpperCase()).filter(Boolean);
+    try {
+      const response = await api.updateProfile({ schoolId: profile.school.id, campusId: profile.campus.id, nickname: profile.nickname, major: profile.major, grade: profile.grade, studentType: profile.studentType, activities: profile.activities.includes("LUNCH") ? profile.activities : ["LUNCH", ...profile.activities], interests: selectedInterests, languages: profile.languages });
+      setProfile(response.data); setInterests(response.data.interests.join(", ")); setMessage("기본 프로필을 저장했어요.");
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "프로필을 저장하지 못했어요."); }
+  };
+  if (!profile) return message ? <p className="form-message">{message}</p> : null;
+  return <section className="settings-card profile-api-card"><p className="eyebrow">PROFILE API</p><h3>기본 정보</h3><div className="profile-api-fields"><label>닉네임<input value={profile.nickname} onChange={(event) => setProfile({ ...profile, nickname: event.target.value })} /></label><label>전공<input value={profile.major} onChange={(event) => setProfile({ ...profile, major: event.target.value })} /></label><label className="profile-api-wide">관심사 코드 (쉼표로 구분)<input value={interests} onChange={(event) => setInterests(event.target.value)} placeholder="MUSIC, TRAVEL" /></label></div><button className="primary" onClick={() => void save()}>기본 정보 저장</button>{message && <p className="form-message">{message}</p>}</section>;
 }
 
 function ProfileView() {
   const interests = ["음악", "여행", "영화", "맛집", "게임", "운동", "책", "테크"];
-  const [selected, setSelected] = useState(["음악", "여행"]); const [discoverable, setDiscoverable] = useState(true); const [minimum, setMinimum] = useState(60);
+  const [selected, setSelected] = useState(["음악", "여행"]); const [discoverable, setDiscoverable] = useState(true); const [minimum, setMinimum] = useState<30 | 60 | 90 | 120>(60); const [saveMessage, setSaveMessage] = useState("");
   const toggle = (interest: string) => setSelected((items) => items.includes(interest) ? items.filter((item) => item !== interest) : items.length < 10 ? [...items, interest] : items);
-  return <section className="profile-layout"><div><p className="eyebrow">온보딩 1/3</p><h2>나를 소개해 주세요</h2><p className="subtle">관심사가 비슷하고 공강이 겹치는 메이트를 추천해 드려요.</p><label className="field-label">관심사 <span>{selected.length}/10</span></label><div className="interest-grid">{interests.map((interest) => <button className={selected.includes(interest) ? "selected" : ""} key={interest} onClick={() => toggle(interest)}>{interest}</button>)}</div></div><aside className="settings-card"><h3>매칭 설정</h3><label className="switch-row"><span><strong>다른 학생에게 보이기</strong><small>해제해도 내 추천은 볼 수 있어요.</small></span><input type="checkbox" checked={discoverable} onChange={(event) => setDiscoverable(event.target.checked)} /></label><label className="field-label">최소 만남 시간</label><div className="duration-row">{[30, 60, 90, 120].map((minutes) => <button className={minimum === minutes ? "selected" : ""} key={minutes} onClick={() => setMinimum(minutes)}>{minutes}분</button>)}</div><button className="primary full-width">변경사항 저장</button></aside></section>;
+  useEffect(() => { void api.getMatchPreferences().then((response) => { setDiscoverable(response.data.isDiscoverable); setMinimum(response.data.minimumMeetingMinutes); }).catch(() => setSaveMessage("매칭 설정은 아직 서버와 연결되지 않았어요.")); }, []);
+  const save = async () => { try { await api.updateMatchPreferences({ isDiscoverable: discoverable, minimumMeetingMinutes: minimum }); setSaveMessage("매칭 설정을 저장했어요."); } catch (cause) { setSaveMessage(cause instanceof Error ? cause.message : "매칭 설정을 저장하지 못했어요."); } };
+  return <section className="profile-layout"><div><p className="eyebrow">온보딩 1/3</p><h2>나를 소개해 주세요</h2><p className="subtle">관심사가 비슷하고 공강이 겹치는 메이트를 추천해 드려요.</p><label className="field-label">관심사 <span>{selected.length}/10</span></label><div className="interest-grid">{interests.map((interest) => <button className={selected.includes(interest) ? "selected" : ""} key={interest} onClick={() => toggle(interest)}>{interest}</button>)}</div></div><aside className="settings-card"><h3>매칭 설정</h3><label className="switch-row"><span><strong>다른 학생에게 보이기</strong><small>해제해도 내 추천은 볼 수 있어요.</small></span><input type="checkbox" checked={discoverable} onChange={(event) => setDiscoverable(event.target.checked)} /></label><label className="field-label">최소 만남 시간</label><div className="duration-row">{([30, 60, 90, 120] as const).map((minutes) => <button className={minimum === minutes ? "selected" : ""} key={minutes} onClick={() => setMinimum(minutes)}>{minutes}분</button>)}</div><button className="primary full-width" onClick={() => void save()}>변경사항 저장</button>{saveMessage && <p className="form-message">{saveMessage}</p>}</aside></section>;
 }
 
 function ProposalDialog({ match, onClose, onComplete }: { match: Match; onClose: () => void; onComplete: () => void }) {

@@ -4,8 +4,11 @@ services:
       context: ./frontend
       target: production
       args:
-        VITE_USE_MOCK_API: ${VITE_USE_MOCK_API:-true}
+        VITE_USE_MOCK_API: ${VITE_USE_MOCK_API:-false}
         VITE_API_ORIGIN: ${VITE_API_ORIGIN:-}
+        VITE_DEMO_ACCESS_TOKEN: ${VITE_DEMO_ACCESS_TOKEN:-demo:user_a}
+        VITE_SUPABASE_URL: ${SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
     restart: unless-stopped
     ports:
       - "127.0.0.1:5173:80"
@@ -14,12 +17,12 @@ services:
     build:
       context: ./backend
     restart: unless-stopped
-    env_file:
-      - ./backend/.env
     environment:
       DATABASE_URL: postgres://lunch_mate:${POSTGRES_PASSWORD:-lunch_mate_dev}@postgres:5432/lunch_mate
       NODE_ENV: production
       PORT: 3000
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

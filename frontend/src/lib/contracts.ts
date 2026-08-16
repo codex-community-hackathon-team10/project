@@ -61,6 +61,68 @@ export type CreateProposalInput = {
   message: string | null;
 };
 
+export type ScheduleRecord = {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  subjectName: string;
+  startTime: string;
+  endTime: string;
+  classroom: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatchPreference = {
+  isDiscoverable: boolean;
+  minimumMeetingMinutes: 30 | 60 | 90 | 120;
+  updatedAt: string;
+};
+
+export type PreferredSlot = {
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+};
+
+export type Availability = {
+  preferredSlots: PreferredSlot[];
+  effectiveSlots: TimeSlot[];
+  updatedAt: string;
+};
+
+export type FreeTimes = {
+  serviceWindow: { startTime: string; endTime: string; timeZone: string };
+  slots: TimeSlot[];
+  calculatedAt: string;
+};
+
+export type Profile = {
+  userId: string;
+  school: { id: string; name: string };
+  campus: { id: string; name: string };
+  nickname: string;
+  major: string;
+  grade: string;
+  studentType: "DOMESTIC" | "INTERNATIONAL" | "EXCHANGE" | "OTHER";
+  activities: string[];
+  interests: string[];
+  languages: { speaks: string[]; learning: string[] };
+  isComplete: boolean;
+  updatedAt: string;
+};
+
+export type UpdateProfileInput = {
+  schoolId: string;
+  campusId: string;
+  nickname: string;
+  major: string;
+  grade: string;
+  studentType: Profile["studentType"];
+  activities: string[];
+  interests: string[];
+  languages: Profile["languages"];
+};
+
 /** AI가 자연어 요청을 파싱하고 기존 추천 규칙을 실행한 결과입니다. */
 export type MatchChatResponse = {
   assistantMessage: string;
