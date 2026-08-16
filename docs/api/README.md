@@ -1,130 +1,91 @@
-# 점심 메이트 API 명세
+# API 명세 인덱스
 
-> 버전: v1.1
-> 기준 PRD: [`PRD.md`](../PRD.md)
-> 기준 기능 명세: [`LUNCH_MATE_FUNCTIONAL_SPEC.md`](../LUNCH_MATE_FUNCTIONAL_SPEC.md)
+> API 버전: v1
 > Base URL: `/api/v1`
+> 유일한 기능 정본: [`docs/funtiondalspec.md`](../funtiondalspec.md)
 
-## 목적
+## 정본 원칙
 
-프론트엔드와 백엔드가 독립적으로 구현할 수 있도록 HTTP 계약과 구현 우선순위를 고정한다. 프론트엔드는 성공·오류 예시를 Mock 응답으로 사용하고, 백엔드는 같은 경로·필드·상태 코드로 구현한다.
+`docs/funtiondalspec.md`가 제품 범위, 우선순위와 기능 규칙의 유일한 정본이다. 이 디렉터리는 정본을 프론트엔드·백엔드가 구현할 수 있는 HTTP 계약으로 구체화한다.
 
-## 우선순위 원칙
+충돌 시 적용 순서:
 
-- `P0`: 오늘 데모 경로에 반드시 필요한 API
-- `P0-lite`: 최소 안전 조건을 위한 작은 구현
-- `P1`: 핵심 경로 안정화 후 구현
-- `P2`: 해커톤 이후 확장
+1. `docs/funtiondalspec.md`
+2. `docs/api/*.md`
+3. 코드와 Mock 데이터
 
-P0 데모 경로:
-
-```text
-데모 로그인 → 최소 프로필 → 주간 수업 전체 저장 → 공강·선호 시간
-→ 매칭 카드 → 장소 3개 추천 → 제안 → 수락 → ACCEPTED 제안 조회
-```
-
-## 계약 원칙
-
-1. JSON 필드명은 `camelCase`, URL은 복수 명사와 `kebab-case`를 사용한다.
-2. 성공은 `{ "data": ... }`, 오류는 `{ "error": ... }`를 사용한다.
-3. 빈 목록은 `null`이 아니라 `[]`다.
-4. 프론트는 HTTP 상태와 `error.code`로 분기한다.
-5. 공강·매칭·장소 후보·충돌은 서버 알고리즘이 결정한다.
-6. AI는 저장 데이터로 계산된 추천 이유 문구만 만들며 실패 시 템플릿을 사용한다.
-7. `MeetingProposal`이 제안과 약속 상태의 단일 원본이다. 별도 Appointment 엔티티를 만들지 않는다.
-8. 상대의 전체 시간표, 학과, 학생 유형, 자기소개, 이메일과 연락처를 추천 응답에 포함하지 않는다.
+정본에 없는 기능을 API 문서만 보고 P0에 추가하지 않는다.
 
 ## 문서 목록
 
-| 문서 | 담당 기능 | 우선순위 |
-|---|---|---|
-| [00-common.md](./00-common.md) | 공통 응답·오류·날짜·인증 규약 | P0 |
-| [01-auth.md](./01-auth.md) | 데모 로그인·내 계정, 공개 가입·갱신 | P0/P1 |
-| [02-reference-data.md](./02-reference-data.md) | 학교·캠퍼스·선택지 | P0 |
-| [03-profile.md](./03-profile.md) | 최소 프로필과 공개 범위 | P0/P1 |
-| [04-schedules.md](./04-schedules.md) | 주간 수업 전체 저장·공강 계산 | P0/P1/P2 |
-| [05-availability.md](./05-availability.md) | 선호 시간·최소 만남 시간 | P0 |
-| [06-matches.md](./06-matches.md) | 최소 공개 매칭 카드 | P0/P1 |
-| [07-proposals.md](./07-proposals.md) | 날짜 검증·제안·수락·단일 상태 모델 | P0/P1 |
-| [08-appointments.md](./08-appointments.md) | `ACCEPTED` 제안 기반 약속 뷰 | P0 |
-| [09-safety.md](./09-safety.md) | 최소 차단과 신고 | P0-lite/P1 |
-| [10-places.md](./10-places.md) | 검증된 후보 기반 장소 추천 | P0 |
+| 문서 | 범위 |
+|---|---|
+| [00-common.md](./00-common.md) | 공통 응답, 오류, 인증, 날짜·시간 |
+| [01-profile.md](./01-profile.md) | 기준 데이터, 프로필, 매칭 선호 |
+| [02-schedules.md](./02-schedules.md) | 수업 CRUD, 공강, 선호 시간 |
+| [03-matches.md](./03-matches.md) | 추천 필터·점수·카드 |
+| [04-venues.md](./04-venues.md) | 사전 검수 장소 추천 |
+| [05-meeting-proposals.md](./05-meeting-proposals.md) | 제안 생성·조회·상태 변경·약속 뷰 |
 
-## 엔드포인트
+## P0 엔드포인트
 
-### P0
+### 기준 데이터·프로필
 
 | Method | Path | 기능 |
 |---|---|---|
-| `POST` | `/auth/login` | 데모 계정 로그인 |
-| `GET` | `/users/me` | 내 계정·인증 상태 |
 | `GET` | `/schools` | 학교 목록 |
 | `GET` | `/schools/{schoolId}/campuses` | 캠퍼스 목록 |
 | `GET` | `/profile-options` | 프로필 선택지 |
-| `GET` | `/users/me/profile` | 내 프로필 조회 |
-| `PUT` | `/users/me/profile` | 최소 프로필 전체 저장 |
-| `GET` | `/users/me/classes` | 내 주간 수업 목록 |
-| `PUT` | `/users/me/classes` | 주간 수업 전체 교체 |
-| `GET` | `/users/me/free-slots` | 점심 공강 계산 결과 |
-| `GET` | `/users/me/availability` | 선호 시간 조회 |
-| `PUT` | `/users/me/availability` | 선호 시간 전체 저장 |
-| `GET` | `/matches` | 최소 공개 추천 카드 |
-| `GET` | `/matches/{userId}` | 추천 상대·제안 시간 후보 |
-| `GET` | `/place-recommendations` | 장소 최대 3개 추천 |
-| `POST` | `/proposals` | 날짜·장소 기반 제안 생성 |
-| `GET` | `/proposals` | 보낸·받은 제안 및 약속 목록 |
-| `GET` | `/proposals/{proposalId}` | 제안 상세 |
-| `POST` | `/proposals/{proposalId}/accept` | 재검증 후 제안 수락 |
-| `POST` | `/blocks` | 사용자 차단·매칭 제외 `P0-lite` |
+| `GET` | `/me/profile` | 내 프로필 조회 |
+| `PUT` | `/me/profile` | 내 프로필 전체 저장 |
+| `GET` | `/me/match-preferences` | 매칭 선호 조회 |
+| `PUT` | `/me/match-preferences` | 발견 허용·최소 시간 저장 |
 
-### P1
+### 시간표·가능 시간
 
 | Method | Path | 기능 |
 |---|---|---|
-| `POST` | `/auth/sign-up` | 공개 회원가입 |
-| `POST` | `/auth/refresh` | Access Token 갱신 |
-| `POST` | `/auth/logout` | 로그아웃 |
-| `PATCH` | `/users/me/profile` | 프로필 일부 수정 |
-| `POST` | `/users/me/classes` | 개별 수업 등록 |
-| `PATCH` | `/users/me/classes/{classId}` | 개별 수업 수정 |
-| `DELETE` | `/users/me/classes/{classId}` | 개별 수업 삭제 |
-| `POST` | `/match-actions` | 관심·넘기기 |
-| `POST` | `/proposals/{proposalId}/reject` | 제안 거절 |
-| `POST` | `/proposals/{proposalId}/cancel` | 대기·수락 제안 취소 |
-| `GET` | `/blocks` | 차단 목록 |
-| `DELETE` | `/blocks/{blockId}` | 차단 해제 |
-| `POST` | `/reports` | 사용자 신고 |
+| `GET` | `/me/schedules` | 내 수업 목록 |
+| `POST` | `/me/schedules` | 수업 등록 |
+| `PATCH` | `/me/schedules/{scheduleId}` | 수업 수정 |
+| `DELETE` | `/me/schedules/{scheduleId}` | 수업 삭제 |
+| `GET` | `/me/free-times` | 계산된 공강 조회 |
+| `GET` | `/me/availability` | 선호·유효 가능 시간 조회 |
+| `PUT` | `/me/availability` | 선호 시간 전체 저장 |
 
-### P2
+### 추천·장소·제안
 
 | Method | Path | 기능 |
 |---|---|---|
-| `POST` | `/users/me/schedule-imports` | OCR 분석 |
-| `POST` | `/users/me/schedule-imports/{importId}/confirm` | OCR 결과 확정 |
+| `GET` | `/matches` | 공통 공강 메이트 추천 |
+| `GET` | `/venues/recommendations` | 장소 최대 3개 추천 |
+| `POST` | `/meeting-proposals` | 점심 만남 제안 생성 |
+| `GET` | `/meeting-proposals` | 받은·보낸 제안과 약속 조회 |
+| `PATCH` | `/meeting-proposals/{proposalId}/status` | 수락·거절·취소 |
 
-## 프론트엔드 병렬 작업 기준
+## P0 제외
 
-- `/api/v1`을 공통 prefix로 사용한다.
-- P0 인증은 Access Token만 저장하고 `401`이면 데모 로그인 화면으로 이동한다.
-- P1 Refresh Token이 구현되면 `401 AUTH_TOKEN_EXPIRED`에 갱신을 한 번만 시도한다.
-- 페이지마다 `loading`, `success`, `empty`, `error` 상태를 구현한다.
-- 장소 추천 실패 화면에는 항상 직접 장소 입력을 제공한다.
-- `409` 상태 충돌을 받으면 제안 상세와 목록을 다시 조회한다.
-- 약속 탭은 `GET /proposals?status=ACCEPTED`를 사용한다.
+- 자체 회원가입·Access/Refresh Token·다기기 세션 API
+- 차단·신고 API
+- 시간표 OCR
+- 실제 장소 검색 API
+- `LUNCH` 외 만남 제안
+- 별도 Appointment 엔티티와 `/appointments` API
 
-## 백엔드 병렬 작업 기준
+## 프론트엔드 구현 규칙
 
-- 사용자 소유 리소스는 인증 사용자 ID로 조회한다.
-- 제안 생성과 수락 모두 주간 공통 시간과 같은 날짜의 `ACCEPTED` 제안 충돌을 검사한다.
-- 수락 시 별도 Appointment 레코드를 생성하지 않는다.
-- 장소 후보는 seed 데이터와 점수로 정하고 AI 출력으로 후보를 추가하지 않는다.
-- 추천 장소 선택 시 장소 표시 정보를 Proposal snapshot으로 저장한다.
-- 차단 관계는 양방향 추천 필터와 신규 제안 검증에 적용한다.
-- 제안 상태 변경은 트랜잭션으로 원자 처리한다.
+- 인증 SDK에서 받은 Access Token을 `Authorization: Bearer`로 전달한다.
+- `error.code`와 HTTP 상태로 분기한다.
+- 각 화면에 loading, success, empty, error 상태를 구현한다.
+- 장소 추천 실패 시 직접 장소 입력을 계속 제공한다.
+- 약속 탭은 `GET /meeting-proposals?status=ACCEPTED`를 사용한다.
+- 상대의 전체 시간표를 클라이언트에서 재구성하거나 추측하지 않는다.
 
-## 계약 변경 절차
+## 백엔드 구현 규칙
 
-1. 이 문서와 해당 기능 문서를 먼저 수정한다.
-2. 프론트·백엔드 담당자가 변경을 확인한다.
-3. 기존 필드 삭제·이름·타입 변경은 양쪽 합의 없이 하지 않는다.
-4. 양쪽 구현과 Mock 데이터를 함께 갱신한다.
+- 인증 제공자의 Token을 서버에서 검증하고 현재 사용자 ID를 확정한다.
+- 공강, 매칭, 장소 순위와 충돌 검사는 서버 규칙으로 계산한다.
+- 제안 생성과 수락 시 확정 약속 충돌을 모두 검사한다.
+- 같은 날짜에 서로 다른 최대 2명에게만 `PENDING` 또는 `ACCEPTED` 제안을 유지할 수 있게 한다.
+- `MeetingProposal`이 약속 상태의 단일 원본이다.
+- AI는 추천 이유만 다듬으며 실패 시 템플릿을 반환한다.
