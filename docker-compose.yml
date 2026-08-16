@@ -17,6 +17,8 @@ services:
     build:
       context: ./backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgres://lunch_mate:${POSTGRES_PASSWORD:-lunch_mate_dev}@postgres:5432/lunch_mate
       NODE_ENV: production
