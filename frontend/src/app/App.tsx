@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ApiError, api, setAccessToken } from "../lib/api";
-import { hasSupabaseAuthConfig, signInWithEmail, signUpWithEmail } from "../lib/auth";
+import { ApiError, api } from "../lib/api";
+import { clearAuthSession, hasSupabaseAuthConfig, restoreAuthSession, signInWithEmail, signUpWithEmail } from "../lib/auth";
 import type { Campus, DayOfWeek, Match, MatchChatIntent, PreferredSlot, Profile, ProfileOptions, Proposal, ProposalStatus, School, UpdateProfileInput, Venue } from "../lib/contracts";
 
 type Tab = "matches" | "proposals" | "schedule" | "profile";
@@ -14,9 +14,11 @@ function ShibaAvatar({ className = "" }: { className?: string }) {
 }
 
 export function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const signOut = () => { setAccessToken(null); setIsAuthenticated(false); };
-  return isAuthenticated ? <ServiceApp onSignOut={signOut} /> : <AuthPage onAuthenticated={() => setIsAuthenticated(true)} />;
+  const [authState, setAuthState] = useState<"loading" | "authenticated" | "anonymous">("loading");
+  useEffect(() => { void restoreAuthSession().then((isAuthenticated) => setAuthState(isAuthenticated ? "authenticated" : "anonymous")); }, []);
+  const signOut = () => { clearAuthSession(); setAuthState("anonymous"); };
+  if (authState === "loading") return <main className="auth-page"><section className="auth-card"><p className="eyebrow">LUNCH MATE</p><h2>로그인 상태를 확인하고 있어요…</h2></section></main>;
+  return authState === "authenticated" ? <ServiceApp onSignOut={signOut} /> : <AuthPage onAuthenticated={() => setAuthState("authenticated")} />;
 }
 
 function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
@@ -48,6 +50,7 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [isPersistent, setIsPersistent] = useState(false);
   const [error, setError] = useState("");
   const submit = async () => {
     if (!email.includes("@") || password.length < 6) return setError("이메일과 6자 이상의 비밀번호를 확인해 주세요.");
@@ -55,13 +58,13 @@ function AuthPage({ onAuthenticated }: { onAuthenticated: () => void }) {
     try {
       setError("");
       if (!hasSupabaseAuthConfig()) throw new Error("Supabase 인증 설정이 없습니다. backend/.env를 사용해 Docker를 다시 실행해 주세요.");
-      if (mode === "login") await signInWithEmail(email, password);
-      else await signUpWithEmail(email, password, nickname.trim());
+      if (mode === "login") await signInWithEmail(email, password, isPersistent);
+      else await signUpWithEmail(email, password, nickname.trim(), isPersistent);
       onAuthenticated();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "인증에 실패했어요."); }
   };
   const switchMode = (next: "login" | "signup") => { setMode(next); setError(""); };
-  return <main className="auth-page"><section className="auth-intro"><p className="eyebrow">LUNCH MATE</p><h1>점심 공강,<br /><em>혼자 보내지 마세요.</em></h1><p>같은 캠퍼스에서 공강이 겹치는 친구를 만나 보세요.</p><ul><li>같은 캠퍼스의 메이트 추천</li><li>공통 공강 시간으로 안전한 제안</li><li>시간에 맞는 점심 장소 추천</li></ul></section><section className="auth-card"><div className="auth-brand">LM</div><div className="auth-heading"><p className="eyebrow">{mode === "login" ? "WELCOME BACK" : "START LUNCH MATE"}</p><h2>{mode === "login" ? "다시 만나서 반가워요" : "점심 메이트를 찾아볼까요?"}</h2><p>{mode === "login" ? "로그인하고 오늘의 공강 메이트를 확인하세요." : "가입 후 프로필과 공강 시간을 설정할 수 있어요."}</p></div><div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => switchMode("login")}>로그인</button><button className={mode === "signup" ? "selected" : ""} onClick={() => switchMode("signup")}>회원가입</button></div><form onSubmit={(event) => { event.preventDefault(); submit(); }}><label>이메일<input type="email" autoComplete="email" placeholder="you@university.ac.kr" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>{mode === "signup" && <label>닉네임<input placeholder="2~20자" value={nickname} onChange={(event) => setNickname(event.target.value)} required /></label>}<label>비밀번호<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="6자 이상 입력" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{mode === "signup" && <label>비밀번호 확인<input type="password" autoComplete="new-password" placeholder="비밀번호를 다시 입력" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} required /></label>}{mode === "login" && <label className="remember"><input type="checkbox" /> 로그인 상태 유지</label>}{error && <p className="error">{error}</p>}<button className="primary full-width auth-submit" type="submit">{mode === "login" ? "로그인" : "회원가입하고 시작하기"}</button></form><p className="auth-notice">Supabase 인증으로 계정을 안전하게 관리합니다.</p></section></main>;
+  return <main className="auth-page"><section className="auth-intro"><p className="eyebrow">LUNCH MATE</p><h1>점심 공강,<br /><em>혼자 보내지 마세요.</em></h1><p>같은 캠퍼스에서 공강이 겹치는 친구를 만나 보세요.</p><ul><li>같은 캠퍼스의 메이트 추천</li><li>공통 공강 시간으로 안전한 제안</li><li>시간에 맞는 점심 장소 추천</li></ul></section><section className="auth-card"><div className="auth-brand">LM</div><div className="auth-heading"><p className="eyebrow">{mode === "login" ? "WELCOME BACK" : "START LUNCH MATE"}</p><h2>{mode === "login" ? "다시 만나서 반가워요" : "점심 메이트를 찾아볼까요?"}</h2><p>{mode === "login" ? "로그인하고 오늘의 공강 메이트를 확인하세요." : "가입 후 프로필과 공강 시간을 설정할 수 있어요."}</p></div><div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => switchMode("login")}>로그인</button><button className={mode === "signup" ? "selected" : ""} onClick={() => switchMode("signup")}>회원가입</button></div><form onSubmit={(event) => { event.preventDefault(); submit(); }}><label>이메일<input type="email" autoComplete="email" placeholder="you@university.ac.kr" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>{mode === "signup" && <label>닉네임<input placeholder="2~20자" value={nickname} onChange={(event) => setNickname(event.target.value)} required /></label>}<label>비밀번호<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="6자 이상 입력" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{mode === "signup" && <label>비밀번호 확인<input type="password" autoComplete="new-password" placeholder="비밀번호를 다시 입력" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} required /></label>}<label className="remember"><input type="checkbox" checked={isPersistent} onChange={(event) => setIsPersistent(event.target.checked)} /> 로그인 상태 유지</label>{error && <p className="error">{error}</p>}<button className="primary full-width auth-submit" type="submit">{mode === "login" ? "로그인" : "회원가입하고 시작하기"}</button></form><p className="auth-notice">Supabase 인증으로 계정을 안전하게 관리합니다.</p></section></main>;
 }
 
 function Matches() {
