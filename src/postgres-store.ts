@@ -1,13 +1,30 @@
 import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
-import type { Campus, MatchPreference, PreferredSlot, Profile, Schedule, School, User } from "./domain/types.js";
-import { now, type CoreStore } from "./store.js";
+import type { Campus, MatchPreference, MeetingProposal, PreferredSlot, Profile, ProposalStatus, ProposalVenue, Schedule, School, User, Venue } from "./domain/types.js";
+import { now, type SocialStore } from "./store.js";
 
 const toIso = (value: Date | string): string => new Date(value).toISOString();
+const toDate = (value: Date | string): string => value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 const profileFromRow = (row: QueryResultRow): Profile => ({ userId: row.user_id, schoolId: row.school_id, campusId: row.campus_id, nickname: row.nickname, major: row.major, grade: row.grade, studentType: row.student_type, activities: row.activities, interests: row.interests, languages: row.languages, updatedAt: toIso(row.updated_at) });
 const scheduleFromRow = (row: QueryResultRow): Schedule => ({ id: row.id, userId: row.user_id, dayOfWeek: row.day_of_week, subjectName: row.subject_name, startTime: row.start_time, endTime: row.end_time, classroom: row.classroom, createdAt: toIso(row.created_at), updatedAt: toIso(row.updated_at) });
+const venueFromRow = (row: QueryResultRow): Venue => ({ id: row.id, campusId: row.campus_id, name: row.name, category: row.category, walkMinutes: row.walk_minutes, priceRange: row.price_range, tags: row.tags, description: row.description, isActive: row.is_active });
+const proposalFromRow = (row: QueryResultRow): MeetingProposal => ({
+  id: row.id,
+  senderId: row.sender_id,
+  receiverId: row.receiver_id,
+  date: toDate(row.meeting_date),
+  startTime: row.start_time,
+  endTime: row.end_time,
+  activity: row.activity,
+  venue: { type: row.venue_type, venueId: row.venue_id, name: row.venue_name, walkMinutes: row.venue_walk_minutes, priceRange: row.venue_price_range } as ProposalVenue,
+  message: row.message,
+  status: row.status,
+  createdAt: toIso(row.created_at),
+  respondedAt: row.responded_at ? toIso(row.responded_at) : null,
+  canceledBy: row.canceled_by
+});
 
-export class PostgresStore implements CoreStore {
+export class PostgresStore implements SocialStore {
   constructor(private readonly pool: Pool) {}
 
   async close(): Promise<void> { await this.pool.end(); }
@@ -30,6 +47,32 @@ export class PostgresStore implements CoreStore {
   async saveAvailability(userId: string, slots: PreferredSlot[]): Promise<PreferredSlot[]> { await this.ensureUser(userId); const client = await this.pool.connect(); try { await client.query("BEGIN"); await client.query("DELETE FROM availability_slots WHERE user_id = $1", [userId]); for (const slot of slots) await client.query("INSERT INTO availability_slots (user_id,day_of_week,start_time,end_time) VALUES ($1,$2,$3,$4)", [userId, slot.dayOfWeek, slot.startTime, slot.endTime]); await client.query("INSERT INTO availability_updates (user_id,updated_at) VALUES ($1,$2) ON CONFLICT (user_id) DO UPDATE SET updated_at=EXCLUDED.updated_at", [userId, now()]); await client.query("COMMIT"); return slots; } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); } }
   async getUser(userId: string): Promise<User | undefined> { const result = await this.pool.query("SELECT id, is_active FROM users WHERE id = $1", [userId]); return result.rows[0] ? { id: result.rows[0].id, isActive: result.rows[0].is_active } : undefined; }
   async listProfilesAtCampus(campusId: string): Promise<Profile[]> { const result = await this.pool.query("SELECT * FROM profiles WHERE campus_id = $1", [campusId]); return result.rows.map(profileFromRow); }
+  async listActiveVenues(campusId: string): Promise<Venue[]> { const result = await this.pool.query("SELECT * FROM venues WHERE campus_id = $1 AND is_active = true", [campusId]); return result.rows.map(venueFromRow); }
+  async getActiveVenue(venueId: string): Promise<Venue | undefined> { const result = await this.pool.query("SELECT * FROM venues WHERE id = $1 AND is_active = true", [venueId]); return result.rows[0] ? venueFromRow(result.rows[0]) : undefined; }
+  async getMeetingProposal(proposalId: string): Promise<MeetingProposal | undefined> { const result = await this.pool.query("SELECT * FROM meeting_proposals WHERE id = $1", [proposalId]); return result.rows[0] ? proposalFromRow(result.rows[0]) : undefined; }
+  async listMeetingProposalsForUser(userId: string): Promise<MeetingProposal[]> { const result = await this.pool.query("SELECT * FROM meeting_proposals WHERE sender_id = $1 OR receiver_id = $1", [userId]); return result.rows.map(proposalFromRow); }
+  async createMeetingProposal(proposal: Omit<MeetingProposal, "id" | "createdAt">): Promise<MeetingProposal> {
+    const createdAt = now();
+    const result = await this.pool.query("INSERT INTO meeting_proposals (id,sender_id,receiver_id,meeting_date,start_time,end_time,activity,venue_type,venue_id,venue_name,venue_walk_minutes,venue_price_range,message,status,created_at,responded_at,canceled_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *", [
+      `proposal_${randomUUID()}`, proposal.senderId, proposal.receiverId, proposal.date, proposal.startTime, proposal.endTime, proposal.activity, proposal.venue.type, proposal.venue.venueId, proposal.venue.name, proposal.venue.walkMinutes, proposal.venue.priceRange, proposal.message, proposal.status, createdAt, proposal.respondedAt, proposal.canceledBy
+    ]);
+    return proposalFromRow(result.rows[0]);
+  }
+  async updateMeetingProposalStatus(proposalId: string, expectedStatus: ProposalStatus, update: Pick<MeetingProposal, "status" | "respondedAt" | "canceledBy">): Promise<MeetingProposal | undefined> {
+    const result = await this.pool.query("UPDATE meeting_proposals SET status = $3, responded_at = $4, canceled_by = $5 WHERE id = $1 AND status = $2 RETURNING *", [proposalId, expectedStatus, update.status, update.respondedAt, update.canceledBy]);
+    return result.rows[0] ? proposalFromRow(result.rows[0]) : undefined;
+  }
+  async withUserLocks<T>(userIds: string[], operation: () => Promise<T> | T): Promise<T> {
+    const client = await this.pool.connect();
+    const lockedIds = [...new Set(userIds)].sort();
+    try {
+      for (const userId of lockedIds) await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [userId]);
+      return await operation();
+    } finally {
+      for (const userId of lockedIds.toReversed()) await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [userId]);
+      client.release();
+    }
+  }
 }
 
 export function createPostgresStore(databaseUrl: string): PostgresStore { return new PostgresStore(new Pool({ connectionString: databaseUrl })); }
