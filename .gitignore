@@ -5,3 +5,7 @@ dist/
 !.env.example
 **/data/*.json
 coverage/
+.docker-client/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
