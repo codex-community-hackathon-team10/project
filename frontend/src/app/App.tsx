@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../lib/api";
 import { clearAuthSession, hasSupabaseAuthConfig, restoreAuthSession, signInWithEmail, signUpWithEmail } from "../lib/auth";
 import type { Campus, DayOfWeek, Match, MatchChatIntent, PreferredSlot, Profile, ProfileOptions, Proposal, ProposalStatus, School, UpdateProfileInput, Venue } from "../lib/contracts";
@@ -8,6 +8,7 @@ type Schedule = { id: string; day: DayOfWeek; subject: string; start: string; en
 
 const tabs: Array<{ id: Tab; label: string }> = [{ id: "matches", label: "메이트 찾기" }, { id: "proposals", label: "제안 · 약속" }, { id: "schedule", label: "시간표" }, { id: "profile", label: "내 프로필" }];
 const dayLabels: Record<DayOfWeek, string> = { MONDAY: "월", TUESDAY: "화", WEDNESDAY: "수", THURSDAY: "목", FRIDAY: "금" };
+const PROPOSAL_REFRESH_INTERVAL_MS = 5_000;
 
 function ShibaAvatar({ className = "" }: { className?: string }) {
   return <span className={`shiba-avatar ${className}`}><span aria-hidden="true">🐕</span><img src="/shiba-default.png" alt="시바견 프로필" onError={(event) => { event.currentTarget.style.display = "none"; }} /></span>;
@@ -27,13 +28,38 @@ function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
-  const load = () => void api.getProposals({ status: "PENDING,ACCEPTED" }).then((proposalPage) => { setProposals(proposalPage.data); setError(null); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "데이터를 불러오지 못했어요."));
-  useEffect(load, []);
+  const isRefreshingProposals = useRef(false);
+  const loadProposals = useCallback(async () => {
+    if (isRefreshingProposals.current) return;
+    isRefreshingProposals.current = true;
+    try {
+      const proposalPage = await api.getProposals({ status: "PENDING,ACCEPTED" });
+      setProposals(proposalPage.data);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "데이터를 불러오지 못했어요.");
+    } finally {
+      isRefreshingProposals.current = false;
+    }
+  }, []);
+  useEffect(() => {
+    const refresh = () => void loadProposals();
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    refresh();
+    const intervalId = window.setInterval(refresh, PROPOSAL_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [loadProposals]);
   useEffect(() => { void api.getProfile().then((response) => { setProfile(response.data); setNeedsOnboarding(false); }).catch((cause: unknown) => { if (cause instanceof ApiError && cause.status === 404) setNeedsOnboarding(true); else { setError(cause instanceof Error ? cause.message : "프로필을 확인하지 못했어요."); setNeedsOnboarding(false); } }); }, []);
-  const changeStatus = async (id: string, status: ProposalStatus) => { try { await api.changeProposalStatus(id, status); load(); } catch (cause) { setError(cause instanceof Error ? cause.message : "제안 상태를 바꾸지 못했어요."); } };
+  const changeStatus = async (id: string, status: ProposalStatus) => { try { await api.changeProposalStatus(id, status); await loadProposals(); } catch (cause) { setError(cause instanceof Error ? cause.message : "제안 상태를 바꾸지 못했어요."); } };
 
   if (needsOnboarding === null) return <main className="auth-page"><section className="auth-card"><p className="eyebrow">CAMPUS MATE</p><h2>프로필을 확인하고 있어요…</h2></section></main>;
-  if (needsOnboarding) return <ProfileOnboarding onComplete={(savedProfile) => { setProfile(savedProfile); setNeedsOnboarding(false); load(); }} />;
+  if (needsOnboarding) return <ProfileOnboarding onComplete={(savedProfile) => { setProfile(savedProfile); setNeedsOnboarding(false); void loadProposals(); }} />;
   const isChatMode = tab === "matches";
   return <><header className="site-header"><button className="brand" onClick={() => setTab("matches")} aria-label="Campus Mate 홈"><span>CM</span>Campus Mate</button><nav aria-label="주 메뉴">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</nav><div className="user-menu"><ShibaAvatar className="user-avatar" /><span className="user-name">{profile?.nickname ?? "Campus Mate"}</span><button className="signout" onClick={onSignOut}>로그아웃</button></div></header><main className={isChatMode ? "chat-page" : "app-shell"}>
     {!isChatMode && <header className="hero"><div><p className="eyebrow">CAMPUS MATE</p><h1>공강을 같이 보낼<br />친구를 찾아보세요.</h1><p className="subtle">같은 캠퍼스에서 실제로 만날 수 있는 점심 시간을 연결합니다.</p></div><div className="hero-actions"><div className="status-pill"><span>●</span> 매칭 준비 완료</div></div></header>}
