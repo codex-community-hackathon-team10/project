@@ -23,16 +23,15 @@ function ServiceApp({ onSignOut }: { onSignOut: () => void }) {
   useEffect(load, []);
   const changeStatus = async (id: string, status: ProposalStatus) => { try { await api.changeProposalStatus(id, status); load(); } catch (cause) { setError(cause instanceof Error ? cause.message : "제안 상태를 바꾸지 못했어요."); } };
 
-  return <main className="app-shell">
-    <header className="hero"><div><p className="eyebrow">LUNCH MATE</p><h1>공강을 같이 보낼<br />친구를 찾아보세요.</h1><p className="subtle">같은 캠퍼스에서 실제로 만날 수 있는 점심 시간을 연결합니다.</p></div><div className="hero-actions"><div className="status-pill"><span>●</span> 매칭 준비 완료</div><button className="signout" onClick={onSignOut}>로그아웃</button></div></header>
-    <nav aria-label="주 메뉴">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</nav>
+  return <><header className="site-header"><button className="brand" onClick={() => setTab("matches")} aria-label="Lunch Mate 홈"><span>LM</span>Lunch Mate</button><nav aria-label="주 메뉴">{tabs.map((item) => <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</nav><div className="user-menu"><span className="user-avatar" aria-hidden="true">👋</span><span className="user-name">민지</span><button className="signout" onClick={onSignOut}>로그아웃</button></div></header><main className="app-shell">
+    <header className="hero"><div><p className="eyebrow">LUNCH MATE</p><h1>공강을 같이 보낼<br />친구를 찾아보세요.</h1><p className="subtle">같은 캠퍼스에서 실제로 만날 수 있는 점심 시간을 연결합니다.</p></div><div className="hero-actions"><div className="status-pill"><span>●</span> 매칭 준비 완료</div></div></header>
     {error && <p className="error" role="alert">{error}</p>}
     {tab === "matches" && <Matches matches={matches} onPropose={setTarget} />}
     {tab === "proposals" && <Proposals proposals={proposals} onChange={changeStatus} />}
     {tab === "schedule" && <ScheduleView />}
     {tab === "profile" && <ProfileView />}
     {target && <ProposalDialog match={target} onClose={() => setTarget(null)} onComplete={() => { setTarget(null); setTab("proposals"); load(); }} />}
-  </main>;
+  </main></>;
 }
 
 function AuthPage({ onAuthenticated }: { onAuthenticated: () => void }) {
